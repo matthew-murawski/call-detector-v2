@@ -18,8 +18,9 @@ features = feat_energy_entropy_flux(S, f, struct('energy', params.BP, 'entropy',
 self_mask = build_self_mask(size(S, 2), hop_seconds, produced, params.SelfPadPre, params.SelfPadPost);
 
 % run hysteresis detection and tidy resulting segments.
-frame_in = adaptive_hysteresis(features.energy, features.entropy, features.flux, self_mask, params);
+[frame_in, thresh] = adaptive_hysteresis(features.energy, features.entropy, features.flux, features.tonal_ratio, self_mask, params);
 segs = frames_to_segments(frame_in, hop_seconds);
+segs = filter_by_entropy_coverage(segs, features.entropy, hop_seconds, thresh.entropy_thr, params.MinEntropyCoverage);
 segs = postprocess_segments(segs, params);
 segs = remove_overlaps(segs, produced);
 heard_labels = segs;
@@ -48,6 +49,7 @@ function params = apply_defaults(params)
 if ~isstruct(params) || ~isscalar(params)
     error('run_detect_heard:InvalidParams', 'params must be a scalar struct.');
 end
+% backgroundtrim keeps noisy bursts from skewing thresholds later on.
 defaults = struct(...
     'FsTarget', 48000, ...
     'Win', 0.025, ...
@@ -57,8 +59,12 @@ defaults = struct(...
     'MAD_Tlow', 0.8, ...
     'MAD_Thigh', 1.4, ...
     'EntropyQuantile', 0.35, ...
+    'BackgroundTrim', 0.95, ...
     'FluxQuantileEnter', 0.70, ...
     'FluxQuantileStay', 0.40, ...
+    'TonalityQuantileEnter', 0.80, ...
+    'TonalityQuantileStay', 0.60, ...
+    'MinEntropyCoverage', 0.40, ...
     'MinDur', 0.05, ...
     'MaxDur', 3.00, ...
     'MergeGap', 0.040, ...
@@ -80,12 +86,19 @@ validateattributes(params.BP, {'numeric'}, {'vector', 'numel', 2, 'real', 'posit
 validateattributes(params.EntropyBand, {'numeric'}, {'vector', 'numel', 2, 'real', 'positive'});
 validateattributes(params.MAD_Tlow, {'numeric'}, {'scalar', 'real', 'nonnegative'});
 validateattributes(params.MAD_Thigh, {'numeric'}, {'scalar', 'real', 'nonnegative', '>=', params.MAD_Tlow});
+validateattributes(params.BackgroundTrim, {'numeric'}, {'scalar', '>', 0, '<=', 1});
 validateattributes(params.EntropyQuantile, {'numeric'}, {'scalar', '>', 0, '<', 1});
 validateattributes(params.FluxQuantileEnter, {'numeric'}, {'scalar', '>', 0, '<', 1});
 validateattributes(params.FluxQuantileStay, {'numeric'}, {'scalar', '>', 0, '<', 1});
 if params.FluxQuantileStay > params.FluxQuantileEnter
     error('run_detect_heard:InvalidFluxQuantiles', 'FluxQuantileStay must be <= FluxQuantileEnter.');
 end
+validateattributes(params.TonalityQuantileEnter, {'numeric'}, {'scalar', '>', 0, '<', 1});
+validateattributes(params.TonalityQuantileStay, {'numeric'}, {'scalar', '>', 0, '<', 1});
+if params.TonalityQuantileStay > params.TonalityQuantileEnter
+    error('run_detect_heard:InvalidTonalityQuantiles', 'TonalityQuantileStay must be <= TonalityQuantileEnter.');
+end
+validateattributes(params.MinEntropyCoverage, {'numeric'}, {'scalar', 'real', '>=', 0, '<=', 1});
 validateattributes(params.MinDur, {'numeric'}, {'scalar', 'real', 'nonnegative'});
 validateattributes(params.MaxDur, {'numeric'}, {'scalar', 'real', 'positive', '>=', params.MinDur});
 validateattributes(params.MergeGap, {'numeric'}, {'scalar', 'real', 'nonnegative'});
@@ -138,6 +151,7 @@ if hop_samples >= win_samples
     win_samples = hop_samples + 1;
 end
 end
+
 
 function tf = should_write(outLabelPath)
 if isempty(outLabelPath)

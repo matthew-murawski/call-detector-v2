@@ -217,7 +217,7 @@ nFrames = numel(t);
 mask = build_self_mask(nFrames, P.Hop, produced, P.SelfPadPre, P.SelfPadPost);
 
 % detection
-frame_in = adaptive_hysteresis(fe.energy, fe.entropy, mask, P);
+frame_in = adaptive_hysteresis(fe.energy, fe.entropy, fe.flux, fe.tonal_ratio, mask, P);
 segs = frames_to_segments(frame_in, P.Hop);
 segs = postprocess_segments(segs, P);
 segs = remove_overlaps(segs, produced);

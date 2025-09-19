@@ -48,7 +48,19 @@ if any(flux_mask)
     end
 end
 
+%% compute tonality feature
+tonal_vals = zeros(size(S, 2), 1);
+if any(energy_mask)
+    Sb = S(energy_mask, :);
+    peak_bin = max(Sb, [], 1).';
+    band_mean = mean(Sb, 1).';
+    peak_db = 10 * log10(peak_bin + eps);
+    mean_db = 10 * log10(band_mean + eps);
+    tonal_vals = peak_db - mean_db;
+end
+
 feats.energy = energy_vals;
 feats.entropy = entropy_vals;
 feats.flux = flux_vals;
+feats.tonal_ratio = tonal_vals;
 end

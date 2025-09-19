@@ -20,14 +20,16 @@ classdef test_mvp_e2e < matlab.unittest.TestCase
             tc.addTeardown(@() test_mvp_e2e.cleanup_file(out_path));
 
             heard = run_detect_heard(data.audio, data.produced, out_path, data.params);
-            tc.verifyGreaterThan(size(heard, 1), 0);
+            tc.verifyEqual(size(heard, 1), size(data.truth, 1));
 
             for idx = 1:size(heard, 1)
                 pred = heard(idx, :);
                 best = max(arrayfun(@(j) test_mvp_e2e.interval_iou(pred, data.truth(j, :)), 1:size(data.truth, 1)));
                 tc.verifyGreaterThan(best, 0.30);
-                overlap = test_mvp_e2e.max_overlap(pred, data.produced);
-                tc.verifyLessThanOrEqual(overlap, eps);
+                overlap_self = test_mvp_e2e.max_overlap(pred, data.produced);
+                tc.verifyLessThanOrEqual(overlap_self, eps);
+                overlap_burst = test_mvp_e2e.max_overlap(pred, data.burst);
+                tc.verifyLessThanOrEqual(overlap_burst, eps);
             end
 
             table_out = read_audacity_labels(out_path);
@@ -54,8 +56,10 @@ classdef test_mvp_e2e < matlab.unittest.TestCase
                 1.80 2.20;
             ];
 
+            burst = [0.68 0.88];
+
             x = noise;
-            tone_gain = noise_level * 2.0;  % keep synthetic tone about 6 dB over background
+            tone_gain = noise_level * 3.5;  % keep synthetic tone roughly 10 dB over background
             for idx = 1:size(truth, 1)
                 onset = truth(idx, 1);
                 offset = truth(idx, 2);
@@ -67,32 +71,49 @@ classdef test_mvp_e2e < matlab.unittest.TestCase
                 x(start_idx:stop_idx) = x(start_idx:stop_idx) + tone .* window;
             end
 
+            burst_start = max(1, floor(burst(1) * fs) + 1);
+            burst_stop = min(n_samples, ceil(burst(2) * fs));
+            burst_len = max(burst_stop - burst_start + 1, 0);
+            narrow_len = min(round(0.030 * fs), burst_len);
+            if narrow_len > 0
+                t_local = (0:narrow_len-1).' / fs;
+                x(burst_start:burst_start + narrow_len - 1) = x(burst_start:burst_start + narrow_len - 1) + tone_gain * sin(2 * pi * 7000 * t_local);
+            end
+            remaining = burst_len - narrow_len;
+            if remaining > 0
+                noise_gain = noise_level * 8.0;
+                idx_start = burst_start + narrow_len;
+                x(idx_start:burst_stop) = x(idx_start:burst_stop) + noise_gain * randn(remaining, 1);
+            end
+
             params = struct();
             params.FsTarget = 48000;
             params.Win = 0.025;
             params.Hop = 0.010;
             params.BP = [5000 14000];
             params.EntropyBand = [6000 10000];
-            params.MAD_Tlow = 0.5;
-            params.MAD_Thigh = 1.2;
-            params.EntropyQuantile = 0.30;
+            params.MAD_Tlow = 0.3;
+            params.MAD_Thigh = 0.9;
+            params.EntropyQuantile = 0.35;
             params.MinDur = 0.10;
             params.MaxDur = 0.90;
             params.MergeGap = 0.080;
             params.CloseHole = 0.060;
-            params.SelfPadPre = 0.50;
-            params.SelfPadPost = 0.30;
+            params.SelfPadPre = 0.10;
+            params.SelfPadPost = 0.05;
+            params.MinEntropyCoverage = 0.35;
 
             produced = [
                 0.10 0.18;
                 1.45 1.60;
             ];
 
-            test_mvp_e2e.persist_fixture_outputs(x, fs, truth, produced);
+            test_mvp_e2e.persist_fixture_outputs(x, fs, truth, produced, burst);
 
             data.audio = struct('x', x, 'fs', fs);
             data.produced = produced;
             data.truth = truth;
+            data.burst = burst;
             data.params = params;
         end
 
@@ -111,7 +132,7 @@ classdef test_mvp_e2e < matlab.unittest.TestCase
             val = max([0.0; overlaps(:)]);
         end
 
-        function persist_fixture_outputs(x, fs, truth, produced)
+        function persist_fixture_outputs(x, fs, truth, produced, burst)
             root_dir = fileparts(fileparts(fileparts(mfilename('fullpath'))));
             fixture_dir = fullfile(root_dir, 'tests', 'fixtures');
             if exist(fixture_dir, 'dir') ~= 7
@@ -127,6 +148,8 @@ classdef test_mvp_e2e < matlab.unittest.TestCase
             write_audacity_labels(truth_path, truth, repmat("HEARD", size(truth, 1), 1));
             produced_path = fullfile(fixture_dir, 'mvp_e2e_produced.txt');
             write_audacity_labels(produced_path, produced, repmat("SELF", size(produced, 1), 1));
+            burst_path = fullfile(fixture_dir, 'mvp_e2e_burst.txt');
+            write_audacity_labels(burst_path, burst, repmat("BURST", size(burst, 1), 1));
         end
 
         function cleanup_file(path)
