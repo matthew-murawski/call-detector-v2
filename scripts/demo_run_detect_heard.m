@@ -18,20 +18,22 @@ rng(42);
 fs = 48000;
 duration = 2.6;
 n_samples = round(duration * fs);
-noise = 0.005 * randn(n_samples, 1);
+noise_level = 1e-4;
+noise = noise_level * randn(n_samples, 1);
 truth = [
     0.30 0.60;
     0.95 1.35;
     1.80 2.20;
 ];
 x = noise;
+tone_gain = noise_level * 2.0;  % keep synthetic tone about 6 dB above background
 for idx = 1:size(truth, 1)
     onset = truth(idx, 1);
     offset = truth(idx, 2);
     start_idx = max(1, floor(onset * fs) + 1);
     stop_idx = min(n_samples, ceil(offset * fs));
     t = (start_idx:stop_idx).' / fs;
-    tone = 0.6 * sin(2 * pi * 7000 * (t - onset));
+    tone = tone_gain * sin(2 * pi * 7000 * (t - onset));
     window = hann(numel(t));
     x(start_idx:stop_idx) = x(start_idx:stop_idx) + tone .* window;
 end
