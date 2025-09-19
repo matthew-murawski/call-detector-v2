@@ -45,7 +45,7 @@ classdef test_io_labels_audio < matlab.unittest.TestCase
             audio = 0.5 * sin(2 * pi * 440 * t);
             audio_path = [tempname '.wav'];
             cleaner = onCleanup(@() test_io_labels_audio.delete_if_exists(audio_path));
-            audiowrite(audio_path, audio, fs);
+            audiowrite(audio_path, audio, fs, 'BitsPerSample', 32);
 
             [x_file, fs_file] = read_audio(audio_path);
             tc.verifyEqual(fs_file, fs);
