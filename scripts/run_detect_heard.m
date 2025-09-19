@@ -18,7 +18,7 @@ features = feat_energy_entropy_flux(S, f, struct('energy', params.BP, 'entropy',
 self_mask = build_self_mask(size(S, 2), hop_seconds, produced, params.SelfPadPre, params.SelfPadPost);
 
 % run hysteresis detection and tidy resulting segments.
-frame_in = adaptive_hysteresis(features.energy, features.entropy, self_mask, params);
+frame_in = adaptive_hysteresis(features.energy, features.entropy, features.flux, self_mask, params);
 segs = frames_to_segments(frame_in, hop_seconds);
 segs = postprocess_segments(segs, params);
 segs = remove_overlaps(segs, produced);
@@ -57,6 +57,8 @@ defaults = struct(...
     'MAD_Tlow', 0.8, ...
     'MAD_Thigh', 1.4, ...
     'EntropyQuantile', 0.35, ...
+    'FluxQuantileEnter', 0.70, ...
+    'FluxQuantileStay', 0.40, ...
     'MinDur', 0.05, ...
     'MaxDur', 3.00, ...
     'MergeGap', 0.040, ...
@@ -79,6 +81,11 @@ validateattributes(params.EntropyBand, {'numeric'}, {'vector', 'numel', 2, 'real
 validateattributes(params.MAD_Tlow, {'numeric'}, {'scalar', 'real', 'nonnegative'});
 validateattributes(params.MAD_Thigh, {'numeric'}, {'scalar', 'real', 'nonnegative', '>=', params.MAD_Tlow});
 validateattributes(params.EntropyQuantile, {'numeric'}, {'scalar', '>', 0, '<', 1});
+validateattributes(params.FluxQuantileEnter, {'numeric'}, {'scalar', '>', 0, '<', 1});
+validateattributes(params.FluxQuantileStay, {'numeric'}, {'scalar', '>', 0, '<', 1});
+if params.FluxQuantileStay > params.FluxQuantileEnter
+    error('run_detect_heard:InvalidFluxQuantiles', 'FluxQuantileStay must be <= FluxQuantileEnter.');
+end
 validateattributes(params.MinDur, {'numeric'}, {'scalar', 'real', 'nonnegative'});
 validateattributes(params.MaxDur, {'numeric'}, {'scalar', 'real', 'positive', '>=', params.MinDur});
 validateattributes(params.MergeGap, {'numeric'}, {'scalar', 'real', 'nonnegative'});

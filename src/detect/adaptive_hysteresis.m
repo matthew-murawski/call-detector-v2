@@ -1,19 +1,24 @@
-function frame_in = adaptive_hysteresis(energy, entropy, self_mask, params)
-% adaptive_hysteresis performs energy/entropy hysteresis detection per frame.
+function frame_in = adaptive_hysteresis(energy, entropy, flux, self_mask, params)
+% adaptive_hysteresis performs energy/entropy/flux hysteresis detection per frame.
 
-narginchk(4, 4);
+narginchk(5, 5);
 
 %% normalize inputs
 validateattributes(energy, {'numeric'}, {'vector', 'nonempty', 'real'}, mfilename, 'energy');
 validateattributes(entropy, {'numeric'}, {'vector', 'nonempty', 'real'}, mfilename, 'entropy');
+validateattributes(flux, {'numeric'}, {'vector', 'nonempty', 'real'}, mfilename, 'flux');
 validateattributes(self_mask, {'logical', 'numeric'}, {'vector', 'numel', numel(energy)}, mfilename, 'self_mask');
 validateattributes(params, {'struct'}, {'scalar'}, mfilename, 'params');
 
 energy = double(energy(:));
 entropy = double(entropy(:));
+flux = double(flux(:));
 self_mask = logical(self_mask(:));
 if numel(entropy) ~= numel(energy)
     error('adaptive_hysteresis:SizeMismatch', 'energy and entropy must have the same number of frames.');
+end
+if numel(flux) ~= numel(energy)
+    error('adaptive_hysteresis:FluxSizeMismatch', 'energy and flux must have the same number of frames.');
 end
 
 %% extract parameters with defaults
@@ -26,13 +31,25 @@ end
 if ~isfield(params, 'EntropyQuantile') || isempty(params.EntropyQuantile)
     params.EntropyQuantile = 0.20;
 end
+if ~isfield(params, 'FluxQuantileEnter') || isempty(params.FluxQuantileEnter)
+    params.FluxQuantileEnter = 0.70;
+end
+if ~isfield(params, 'FluxQuantileStay') || isempty(params.FluxQuantileStay)
+    params.FluxQuantileStay = 0.40;
+end
 validateattributes(params.MAD_Tlow, {'numeric'}, {'scalar', 'real', 'nonnegative'}, mfilename, 'params.MAD_Tlow');
 validateattributes(params.MAD_Thigh, {'numeric'}, {'scalar', 'real', 'nonnegative', '>=', params.MAD_Tlow}, mfilename, 'params.MAD_Thigh');
 validateattributes(params.EntropyQuantile, {'numeric'}, {'scalar', '>', 0, '<', 1}, mfilename, 'params.EntropyQuantile');
+validateattributes(params.FluxQuantileEnter, {'numeric'}, {'scalar', '>', 0, '<', 1}, mfilename, 'params.FluxQuantileEnter');
+validateattributes(params.FluxQuantileStay, {'numeric'}, {'scalar', '>', 0, '<', 1}, mfilename, 'params.FluxQuantileStay');
+if params.FluxQuantileStay > params.FluxQuantileEnter
+    error('adaptive_hysteresis:InvalidFluxQuantiles', 'FluxQuantileStay must be <= FluxQuantileEnter.');
+end
 
 %% sanitise feature values
 energy(~isfinite(energy)) = 0;
 entropy(~isfinite(entropy)) = inf;
+flux(~isfinite(flux)) = 0;
 
 %% derive thresholds from background frames
 background_mask = ~self_mask;
@@ -41,6 +58,7 @@ if ~any(background_mask)
 end
 bg_energy = energy(background_mask);
 bg_entropy = entropy(background_mask);
+bg_flux = flux(background_mask);
 
 energy_med = median(bg_energy);
 energy_mad = median(abs(bg_energy - energy_med));
@@ -52,10 +70,18 @@ entropy_thr = local_quantile(bg_entropy, params.EntropyQuantile);
 if isnan(entropy_thr)
     entropy_thr = inf;
 end
+flux_enter_thr = local_quantile(bg_flux, params.FluxQuantileEnter);
+if isnan(flux_enter_thr)
+    flux_enter_thr = 0;
+end
+flux_stay_thr = local_quantile(bg_flux, params.FluxQuantileStay);
+if isnan(flux_stay_thr)
+    flux_stay_thr = 0;
+end
 
 %% hysteresis evaluation
-enter_cond = (energy > Thigh) & (entropy < entropy_thr);
-stay_cond = (energy > Tlow) | (entropy < entropy_thr);
+enter_cond = (energy > Thigh) & (entropy < entropy_thr) & (flux > flux_enter_thr);
+stay_cond = ((energy > Tlow) & (flux > flux_stay_thr)) | (entropy < entropy_thr);
 
 frame_in = false(size(energy));
 state = false;

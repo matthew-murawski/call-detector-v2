@@ -12,7 +12,7 @@ classdef test_hysteresis < matlab.unittest.TestCase
         function detects_three_segments_from_synth(tc)
             data = test_hysteresis.synth_fixture();
             params = test_hysteresis.default_params();
-            frame_in = adaptive_hysteresis(data.feats.energy, data.feats.entropy, data.self_mask, params);
+            frame_in = adaptive_hysteresis(data.feats.energy, data.feats.entropy, data.feats.flux, data.self_mask, params);
             intervals = frames_to_segments(frame_in, data.hop_seconds);
 
             tc.verifyEqual(size(intervals, 1), size(data.expected_segments, 1));
@@ -29,7 +29,7 @@ classdef test_hysteresis < matlab.unittest.TestCase
             mask_frames = data.frame_centers >= second_seg(1) & data.frame_centers <= second_seg(2);
             self_mask(mask_frames) = true;
 
-            frame_in = adaptive_hysteresis(data.feats.energy, data.feats.entropy, self_mask, params);
+            frame_in = adaptive_hysteresis(data.feats.energy, data.feats.entropy, data.feats.flux, self_mask, params);
             tc.verifyFalse(any(frame_in(self_mask)));
 
             intervals = frames_to_segments(frame_in, data.hop_seconds);
@@ -39,6 +39,16 @@ classdef test_hysteresis < matlab.unittest.TestCase
                 tc.verifyFalse(mid_point >= second_seg(1) && mid_point <= second_seg(2));
             end
         end
+
+        function flux_gate_blocks_low_flux_frames(tc)
+            energy = [1 1 1 1 1 1 10 10].';
+            entropy = [2 2 2 2 2 2 0.1 0.1].';
+            flux = zeros(size(energy));
+            params = test_hysteresis.default_params();
+            frame_in = adaptive_hysteresis(energy, entropy, flux, false(size(energy)), params);
+
+            tc.verifyFalse(any(frame_in));
+        end
     end
 
     methods (Static, Access = private)
@@ -46,6 +56,8 @@ classdef test_hysteresis < matlab.unittest.TestCase
             params.MAD_Tlow = 2.0;
             params.MAD_Thigh = 3.5;
             params.EntropyQuantile = 0.20;
+            params.FluxQuantileEnter = 0.70;
+            params.FluxQuantileStay = 0.40;
         end
 
         function data = synth_fixture()
