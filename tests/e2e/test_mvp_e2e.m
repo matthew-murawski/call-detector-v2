@@ -86,6 +86,8 @@ classdef test_mvp_e2e < matlab.unittest.TestCase
                 1.45 1.60;
             ];
 
+            test_mvp_e2e.persist_fixture_outputs(x, fs, truth, produced);
+
             data.audio = struct('x', x, 'fs', fs);
             data.produced = produced;
             data.truth = truth;
@@ -97,6 +99,7 @@ classdef test_mvp_e2e < matlab.unittest.TestCase
             union = max(a(2), b(2)) - min(a(1), b(1));
             val = inter / max(union, eps);
         end
+
         function val = max_overlap(seg, mask)
             if isempty(mask)
                 val = 0.0;
@@ -106,6 +109,23 @@ classdef test_mvp_e2e < matlab.unittest.TestCase
             val = max([0.0; overlaps(:)]);
         end
 
+        function persist_fixture_outputs(x, fs, truth, produced)
+            root_dir = fileparts(fileparts(fileparts(mfilename('fullpath'))));
+            fixture_dir = fullfile(root_dir, 'tests', 'fixtures');
+            if exist(fixture_dir, 'dir') ~= 7
+                mkdir(fixture_dir);
+            end
+            wav_path = fullfile(fixture_dir, 'mvp_e2e_synth.wav');
+            if exist('audiowrite', 'file') == 2
+                audiowrite(wav_path, x, fs);
+            else
+                warning('run_detect_heard:AudioWriteMissing', 'audiowrite unavailable; skipping wav export');
+            end
+            truth_path = fullfile(fixture_dir, 'mvp_e2e_truth.txt');
+            write_audacity_labels(truth_path, truth, repmat("HEARD", size(truth, 1), 1));
+            produced_path = fullfile(fixture_dir, 'mvp_e2e_produced.txt');
+            write_audacity_labels(produced_path, produced, repmat("SELF", size(produced, 1), 1));
+        end
 
         function cleanup_file(path)
             if exist(path, 'file') == 2
