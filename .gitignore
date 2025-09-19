@@ -1,0 +1,34 @@
+# OS cruft
+.DS_Store
+Thumbs.db
+
+# matlab editor + autosave
+*.asv
+*.m~ 
+*.mex*        # platform-specific binaries
+
+# data and outputs (keep repo lean)
+data_MAT/
+data/
+results/
+figures/
+logs/
+scratch/
+
+# but allow tiny toy data and a placeholder
+!data/toy/**
+!figures/.gitkeep
+!results/.gitkeep
+
+# local config and caches
+config/paths_local.m
+temp/
+logs/
+results/
+docs/session_index.csv
+.DS_Store
+*.asv
+
+
+# notebooks / live scripts outputs
+*.mlx
