@@ -9,3 +9,5 @@
 - do not over-comment. space out section-by-section comments by at least about five lines of actual code unless absolutely necessary.
 - keep comments informal yet helpful.
 
+Use this exact command to run the test suite:
+./scripts/run_matlab_tests.sh
