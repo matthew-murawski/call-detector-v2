@@ -13,9 +13,9 @@ if exist(output_dir, 'dir') ~= 7
     mkdir(output_dir);
 end
 
-wav_path = '/Users/matt/Documents/Zhao Lab/audio/M93A_S105_little_clip.wav';
+% wav_path = '/Users/matt/Documents/Zhao Lab/audio/M93A_S105_little_clip.wav';
 
-% wav_path = '/Users/matt/Documents/Zhao Lab/audio/little_clip_M93A_c_S178.wav';
+wav_path = '/Users/matt/Documents/Zhao Lab/audio/little_clip_M93A_c_S178.wav';
 
 produced = [
     0.0 0.18;
@@ -29,7 +29,9 @@ params = struct( ...
     'MAD_Tlow', 0.5, ...
     'MAD_Thigh', 1.2, ...
     'EntropyQuantile', 0.30, ...
-    'MinEntropyCoverage', 0.40);
+    'MinEntropyCoverage', 0.40, ...
+    'UseCalibrator', true, ...
+    'CalibratorPath', 'models/calibrator.mat');
 label_path = fullfile(output_dir, 'demo_detected_labels.txt');
 heard = run_detect_heard(wav_path, produced, label_path, params);
 produced_path = fullfile(output_dir, 'demo_produced_labels.txt');

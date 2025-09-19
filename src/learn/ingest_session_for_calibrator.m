@@ -46,9 +46,10 @@ end
 candidates = run_detect_heard(x_struct, produced, [], params);
 
 candidate_rows = build_rows_from_segments(x, fs, candidates, heard, silence, session_id, opts, 'detected');
-
 silence_rows = build_rows_from_segments(x, fs, silence, heard, silence, session_id, opts, 'silence');
 
+candidate_rows = candidate_rows(:);
+silence_rows = silence_rows(:);
 all_rows = [candidate_rows; silence_rows];
 
 if isempty(all_rows)
@@ -61,10 +62,11 @@ feature_names = {'duration', 'energy_mean', 'energy_p10', 'energy_p50', 'energy_
     'entropy_mean', 'entropy_p10', 'entropy_p50', 'entropy_p90', ...
     'flux_mean', 'flux_p50', 'flux_p90', 'subband_ratio', 'rise_time', 'fall_time', 'max_slope'};
 
-feature_matrix = vertcat(all_rows.features{:});
+feature_matrix = vertcat(all_rows.features);
 
 tbl = array2table(feature_matrix, 'VariableNames', feature_names);
-tbl.session_id = categorical({all_rows.session_id}.');
+session_id_values = string({all_rows.session_id}.');
+tbl.session_id = categorical(session_id_values);
 tbl.onset = vertcat(all_rows.onset);
 tbl.offset = vertcat(all_rows.offset);
 tbl.label = vertcat(all_rows.label);
@@ -164,7 +166,7 @@ for idx = 1:size(segments, 1)
     row.offset = seg(2);
     row.label = double(label);
     row.source = source;
-    row.features = {feats};
+    row.features = feats;
 
     rows(end+1) = row; %#ok<AGROW>
 end

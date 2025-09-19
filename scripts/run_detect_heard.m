@@ -22,6 +22,10 @@ self_mask = build_self_mask(size(S, 2), hop_seconds, produced, params.SelfPadPre
 segs = frames_to_segments(frame_in, hop_seconds);
 segs = filter_by_entropy_coverage(segs, features.entropy, hop_seconds, thresh.entropy_thr, params.MinEntropyCoverage);
 segs = postprocess_segments(segs, params);
+if params.UseCalibrator && ~isempty(params.CalibratorPath)
+    model = load_calibrator(params.CalibratorPath);
+    segs = filter_with_calibrator(segs, x, fs, model);
+end
 segs = remove_overlaps(segs, produced);
 heard_labels = segs;
 
@@ -41,6 +45,8 @@ if isempty(has_added)
     addpath(fullfile(root_dir, 'src', 'io'));
     addpath(fullfile(root_dir, 'src', 'mask'));
     addpath(fullfile(root_dir, 'src', 'label'));
+    addpath(fullfile(root_dir, 'src', 'features'));
+    addpath(fullfile(root_dir, 'src', 'learn'));
     has_added = true;
 end
 end
@@ -70,7 +76,9 @@ defaults = struct(...
     'MergeGap', 0.040, ...
     'CloseHole', 0.020, ...
     'SelfPadPre', 0.001, ...
-    'SelfPadPost', 0.001 ...
+    'SelfPadPost', 0.001, ...
+    'UseCalibrator', false, ...
+    'CalibratorPath', "" ...
     );
 fields = fieldnames(defaults);
 for idx = 1:numel(fields)
@@ -105,6 +113,12 @@ validateattributes(params.MergeGap, {'numeric'}, {'scalar', 'real', 'nonnegative
 validateattributes(params.CloseHole, {'numeric'}, {'scalar', 'real', 'nonnegative'});
 validateattributes(params.SelfPadPre, {'numeric'}, {'scalar', 'real', 'nonnegative'});
 validateattributes(params.SelfPadPost, {'numeric'}, {'scalar', 'real', 'nonnegative'});
+validateattributes(params.UseCalibrator, {'logical', 'numeric'}, {'scalar'});
+if params.UseCalibrator
+    if ~(isstring(params.CalibratorPath) && isscalar(params.CalibratorPath)) && ~ischar(params.CalibratorPath)
+        error('run_detect_heard:InvalidCalibratorPath', 'CalibratorPath must be a char vector or string scalar when UseCalibrator is true.');
+    end
+end
 end
 
 function [x, fs] = ensure_sample_rate(x, fs, target)
@@ -165,4 +179,40 @@ elseif ischar(outLabelPath)
 else
     error('run_detect_heard:InvalidOutputPath', 'outLabelPath must be a char, string, or empty.');
 end
+end
+
+function model = load_calibrator(path)
+persistent cache;
+if isempty(cache)
+    cache = containers.Map();
+end
+key = char(path);
+if isKey(cache, key)
+    model = cache(key);
+    return;
+end
+if exist(path, 'file') ~= 2
+    error('run_detect_heard:CalibratorNotFound', 'Calibrator file not found: %s', path);
+end
+data = load(path, 'model');
+if ~isfield(data, 'model')
+    error('run_detect_heard:InvalidCalibratorFile', 'Calibrator file missing model struct.');
+end
+model = data.model;
+cache(key) = model;
+end
+
+function segs = filter_with_calibrator(segs, x, fs, model)
+if isempty(segs)
+    return;
+end
+
+num_segments = size(segs, 1);
+feature_rows = zeros(num_segments, 16);
+for idx = 1:num_segments
+    feature_rows(idx, :) = segment_features(x, fs, segs(idx, :), struct());
+end
+
+[keep_idx, ~] = apply_calibrator(model, feature_rows);
+segs = segs(keep_idx, :);
 end
