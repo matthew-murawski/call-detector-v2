@@ -43,7 +43,11 @@ if isempty(has_added)
 end
 end
 
-candidates = run_detect_heard(x_struct, produced, [], params);
+if ~isempty(opts.DetectorCandidates)
+    candidates = opts.DetectorCandidates;
+else
+    candidates = run_detect_heard(x_struct, produced, [], params);
+end
 
 candidate_rows = build_rows_from_segments(x, fs, candidates, heard, silence, session_id, opts, 'detected');
 silence_rows = build_rows_from_segments(x, fs, silence, heard, silence, session_id, opts, 'silence');
@@ -81,7 +85,9 @@ function opts = fill_ingest_defaults(opts)
 defaults = struct(...
     'FsTarget', 48000, ...
     'MinOverlapFraction', 0.10, ...
-    'MinSilenceDuration', 0.10 ...
+    'MinSilenceDuration', 0.10, ...
+    'IgnoreUnlabeled', true, ...
+    'DetectorCandidates', [] ...
     );
 fields = fieldnames(defaults);
 for idx = 1:numel(fields)
@@ -93,6 +99,13 @@ end
 validateattributes(opts.FsTarget, {'numeric'}, {'scalar', 'positive'});
 validateattributes(opts.MinOverlapFraction, {'numeric'}, {'scalar', '>=', 0, '<=', 1});
 validateattributes(opts.MinSilenceDuration, {'numeric'}, {'scalar', '>=', 0});
+validateattributes(opts.IgnoreUnlabeled, {'numeric', 'logical'}, {'scalar'});
+opts.IgnoreUnlabeled = logical(opts.IgnoreUnlabeled);
+if ~isempty(opts.DetectorCandidates)
+    opts.DetectorCandidates = validate_candidates(opts.DetectorCandidates);
+else
+    opts.DetectorCandidates = [];
+end
 end
 
 function intervals = load_intervals(input)
@@ -117,6 +130,21 @@ if ischar(input) || (isstring(input) && isscalar(input))
     return;
 end
 error('ingest_session_for_calibrator:UnsupportedIntervalInput', 'unsupported label input type.');
+end
+
+function segments = validate_candidates(value)
+if isa(value, 'table')
+    if all(ismember({'onset', 'offset'}, value.Properties.VariableNames))
+        value = [value.onset, value.offset];
+    else
+        error('ingest_session_for_calibrator:InvalidCandidateTable', 'detector candidates need onset and offset columns.');
+    end
+end
+validateattributes(value, {'numeric'}, {'2d', 'ncols', 2});
+segments = double(value);
+if any(~isfinite(segments(:)))
+    error('ingest_session_for_calibrator:InvalidCandidateValues', 'detector candidates must be finite.');
+end
 end
 
 function session_id = determine_session_id(wavPath, opts)
@@ -149,6 +177,10 @@ for idx = 1:size(segments, 1)
     duration = max(0, seg(2) - seg(1));
     overlap = max_overlap_fraction(seg, heard, duration);
     silence_overlap = max_overlap_fraction(seg, silence, duration);
+
+    if strcmp(source, 'detected') && opts.IgnoreUnlabeled && overlap <= 0 && silence_overlap <= 0
+        continue;
+    end
 
     if strcmp(source, 'silence')
         label = 0;

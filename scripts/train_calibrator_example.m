@@ -2,12 +2,14 @@
 
 setup_paths();
 
-% TODO: list the feature table MAT files you want to include (add real paths).
-feature_files = [
-    "models/features_Session001.mat"
-    % "models/features_Session002.mat"
-    % "models/features_Session003.mat"
-];
+% list the feature table MAT files you want to include (add real paths).
+% feature_files = [
+%     "models/features_S178.mat"
+%     % "models/features_S66.mat"
+%     % "models/features_Session003.mat"
+% ];
+
+feature_files = list_feature_files('models');
 
 if isempty(feature_files)
     error('train_calibrator_example:NoFiles', 'Add at least one feature file path.');
@@ -55,4 +57,64 @@ addpath(fullfile(root_dir, 'src', 'detect'));
 addpath(fullfile(root_dir, 'src', 'io'));
 addpath(fullfile(root_dir, 'src', 'label'));
 addpath(fullfile(root_dir, 'src', 'mask'));
+end
+
+function feature_files = list_feature_files(models_dir)
+% return string array of feature-table .mat files under models_dir
+
+    % choose default models_dir if not provided
+    if nargin < 1 || isempty(models_dir)
+        models_dir = 'models';
+    end
+
+    % validate models_dir exists
+    if ~isfolder(models_dir)
+        error('list_feature_files:NotFound', 'models directory not found: %s', models_dir);
+    end
+
+    pat_primary = fullfile(models_dir, 'features_*.mat');
+    pat_fallback = fullfile(models_dir, '*features*.mat');
+
+    % search for primary pattern first
+    d = dir(pat_primary);
+
+    % fallback to looser match if needed
+    if isempty(d)
+        d = dir(pat_fallback);
+    end
+
+    % handle no matches
+    if isempty(d)
+        warning('list_feature_files:Empty', ...
+            'no feature .mat files found under %s (patterns: %s, %s).', ...
+            models_dir, erase(pat_primary, pwd), erase(pat_fallback, pwd));
+        feature_files = strings(0,1);
+        return
+    end
+
+    % sort by name for stable order
+    names = {d.name}';
+    paths = fullfile({d.folder}', names);
+
+    % convert to relative paths when possible (nicer in repos/scripts)
+    repo_root = pwd; % assume called from repo root or desired base
+    rel_paths = strings(numel(paths),1);
+    for i = 1:numel(paths)
+        try
+            rel = strrep(paths{i}, [repo_root filesep], '');
+        catch
+            rel = paths{i}; %#ok<*NASGU>
+        end
+        rel_paths(i) = string(rel);
+    end
+
+    % ensure forward slashes for portability in string arrays
+    rel_paths = replace(rel_paths, filesep, '/');
+
+    % filter out anything that doesn't end with .mat just in case
+    keep = endsWith(lower(rel_paths), ".mat");
+    rel_paths = rel_paths(keep);
+
+    % return as a column string array
+    feature_files = rel_paths;
 end

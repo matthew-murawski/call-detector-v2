@@ -12,7 +12,7 @@ silence_labels_path = '/Users/matt/Documents/GitHub/vocalization/data/labels/M93
 params = struct();
 
 % Options controlling ingestion behaviour.
-ingest_opts = struct('SessionID', 'Session001');
+ingest_opts = struct('SessionID', 'S178');
 
 % Build feature table and metadata for this session using five-minute chunks.
 [chunk_tbl, chunk_meta] = ingest_session_chunks(wav_path, produced_labels_path, ...
