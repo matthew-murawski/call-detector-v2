@@ -1,6 +1,6 @@
 # Detector Parameter Tuning
 
-`tune_detector_params` explores detection hyperparameters by running `run_detect_heard` across a corpus of sessions that include audio plus human "heard", "produced", and "silence" label intervals. Each parameter combination is scored with recall (fraction of heard intervals covered by detections) and precision (true positives over total predicted segments). Segments that overlap produced or silence annotations count toward false positives, so the search emphasises quiet-call recall without letting precision collapse.
+`tune_detector_params` explores detection hyperparameters by running `run_detect_heard` across a corpus of sessions that include audio plus human "heard", "produced", and "silence" label intervals. Each parameter combination is scored with recall (fraction of heard intervals covered by detections) and precision (true positives over total predicted segments). Because the default detector masks produced intervals before proposal generation, overlaps with produced labels only appear in the metrics if you supply an alternate `DetectorFcn` that preserves them; silence overlaps always contribute to false positives.
 
 ## Running the tuner
 
@@ -22,6 +22,8 @@ results = tune_detector_params(corpus, paramGrid, opts);
 ```
 
 By default the best-performing parameter set is saved to `models/detector_params.json`. Supply a different `SavePath` (or an empty string) when you want to write elsewhere or skip persistence.
+
+Note: `run_detect_heard` suppresses produced regions via `build_self_mask` and trims remaining overlaps via `remove_overlaps`. Adjust or replace those steps if you need the tuner to account for detector-produced conflicts explicitly.
 
 ## Regenerating shipped parameters
 
