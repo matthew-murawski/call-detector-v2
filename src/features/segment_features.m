@@ -22,6 +22,17 @@ x = x(:);
 fs = double(fs);
 seg = double(seg(:).');
 
+coherence_defaults = struct(...
+    'Enabled', true, ...
+    'LogOffset', 1e-8, ...
+    'GradKernel', 'central', ...
+    'SigmaTime', 1.0, ...
+    'SigmaFreq', 1.0, ...
+    'TruncationRadius', 3, ...
+    'Gain', 1.0, ...
+    'Exponent', 1.0, ...
+    'Clip', [0 1] ...
+    );
 defaults = struct(...
     'Win', 0.025, ...
     'Hop', 0.010, ...
@@ -29,7 +40,8 @@ defaults = struct(...
     'EntropyBand', [6000 10000], ...
     'SubbandLow', [6000 9000], ...
     'SubbandHigh', [9000 12000], ...
-    'EnvelopeThreshold', 0.10 ...
+    'EnvelopeThreshold', 0.10, ...
+    'Coherence', coherence_defaults ...
     );
 opts = fill_defaults(opts, defaults);
 
@@ -38,6 +50,7 @@ validate_band(opts.EntropyBand, 'opts.EntropyBand');
 validate_band(opts.SubbandLow, 'opts.SubbandLow');
 validate_band(opts.SubbandHigh, 'opts.SubbandHigh');
 validateattributes(opts.EnvelopeThreshold, {'numeric'}, {'scalar', 'real', '>=', 0, '<', 1}, mfilename, 'opts.EnvelopeThreshold');
+opts.Coherence = fill_coherence_defaults_local(opts.Coherence);
 
 seg_start = max(0, seg(1));
 seg_end = min(seg(2), (numel(x) - 1) / fs);
@@ -64,7 +77,7 @@ if hop_samples >= win_samples
 end
 
 try
-    [S, f, ~] = frame_spectrogram(x_seg, fs, win_samples, hop_samples);
+[S, f, ~] = frame_spectrogram(x_seg, fs, win_samples, hop_samples);
 catch
     S = zeros(0, 0);
     f = zeros(0, 1);
@@ -75,6 +88,8 @@ if isempty(S)
     entropy_feat = zeros(0, 1);
     flux_feat = zeros(0, 1);
 else
+    hop_seconds = hop_samples / fs;
+    [S, ~] = coherence_weight_spectrogram(S, f, hop_seconds, opts.Coherence);
     bands.energy = opts.EnergyBand;
     bands.entropy = opts.EntropyBand;
     feats = feat_energy_entropy_flux(S, f, bands);
@@ -215,4 +230,47 @@ frac = pos - low_idx;
 low_val = x(max(low_idx, 1));
 high_val = x(min(high_idx, n));
 q = low_val + frac * (high_val - low_val);
+end
+
+function coherence = fill_coherence_defaults_local(coherence)
+defaults = struct(...
+    'Enabled', true, ...
+    'LogOffset', 1e-8, ...
+    'GradKernel', 'central', ...
+    'SigmaTime', 1.0, ...
+    'SigmaFreq', 1.0, ...
+    'TruncationRadius', 3, ...
+    'Gain', 1.0, ...
+    'Exponent', 1.0, ...
+    'Clip', [0 1] ...
+    );
+fields = fieldnames(defaults);
+for idx = 1:numel(fields)
+    name = fields{idx};
+    if ~isfield(coherence, name) || isempty(coherence.(name))
+        coherence.(name) = defaults.(name);
+    end
+end
+validateattributes(coherence.Enabled, {'logical', 'numeric'}, {'scalar'});
+coherence.Enabled = logical(coherence.Enabled);
+validateattributes(coherence.LogOffset, {'numeric'}, {'scalar', 'real', '>', 0});
+if ischar(coherence.GradKernel) || (isstring(coherence.GradKernel) && isscalar(coherence.GradKernel))
+    coherence.GradKernel = char(coherence.GradKernel);
+else
+    error('segment_features:InvalidCoherenceKernel', 'Coherence.GradKernel must be a string.');
+end
+validateattributes(coherence.SigmaTime, {'numeric'}, {'scalar', '>=', 0});
+validateattributes(coherence.SigmaFreq, {'numeric'}, {'scalar', '>=', 0});
+validateattributes(coherence.TruncationRadius, {'numeric'}, {'scalar', 'integer', '>=', 1});
+validateattributes(coherence.Gain, {'numeric'}, {'scalar', 'real', '>=', 0});
+validateattributes(coherence.Exponent, {'numeric'}, {'scalar', 'real', '>=', 0});
+if isempty(coherence.Clip)
+    coherence.Clip = [-inf inf];
+else
+    validateattributes(coherence.Clip, {'numeric'}, {'vector', 'numel', 2, 'real'});
+    if coherence.Clip(1) > coherence.Clip(2)
+        error('segment_features:InvalidCoherenceClip', 'Coherence.Clip bounds must be non-decreasing.');
+    end
+end
+coherence.Clip = double(coherence.Clip);
 end

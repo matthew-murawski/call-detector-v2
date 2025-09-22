@@ -1,6 +1,6 @@
 # Detector Parameter Tuning
 
-`tune_detector_params` explores detection hyperparameters by running `run_detect_heard` across a corpus of sessions that include audio plus human "heard", "produced", and "silence" label intervals. Each parameter combination is scored with recall (fraction of heard intervals covered by detections) and precision (true positives over total predicted segments). Because the default detector masks produced intervals before proposal generation, overlaps with produced labels only appear in the metrics if you supply an alternate `DetectorFcn` that preserves them; silence overlaps always contribute to false positives.
+`tune_detector_params` explores detection hyperparameters by running `run_detect_heard` across a corpus of sessions that include audio plus human "heard", "produced", and "silence" label intervals. Each parameter combination is scored with recall (fraction of heard intervals covered by detections) and precision (true positives over total predicted segments). Because the default detector masks produced intervals before proposal generation, overlaps with produced labels only appear in the metrics if you supply an alternate `DetectorFcn` that preserves them; silence overlaps always contribute to false positives. The detector now enhances the spectrogram with a coherence-based ridge booster before feature extraction, so tuning should include the nested `Coherence` parameters when experimenting with contrast or smoothing.
 
 ## Running the tuner
 
@@ -21,7 +21,7 @@ opts = struct('MinPrecision', 0.75);
 results = tune_detector_params(corpus, paramGrid, opts);
 ```
 
-By default the best-performing parameter set is saved to `models/detector_params.json`. Supply a different `SavePath` (or an empty string) when you want to write elsewhere or skip persistence.
+By default the best-performing parameter set is saved to `models/detector_params.json`. Supply a different `SavePath` (or an empty string) when you want to write elsewhere or skip persistence. The JSON payload includes the `Coherence` block (enabled by default) with keys such as `LogOffset`, `SigmaTime`, `SigmaFreq`, `Gain`, `Exponent`, `Clip`, and `GradKernel`; adjust those to control how strongly oriented ridges are emphasised. Use the optional diagnostics from `coherence_weight_spectrogram` if you need to visualise the coherence map during notebook debugging.
 
 Note: `run_detect_heard` suppresses produced regions via `build_self_mask` and trims remaining overlaps via `remove_overlaps`. Adjust or replace those steps if you need the tuner to account for detector-produced conflicts explicitly.
 
@@ -33,4 +33,4 @@ Recreate the checked-in parameter file by rerunning the tuner with the same corp
 results = tune_detector_params(corpus, paramGrid, struct());
 ```
 
-The `results` struct contains per-combination precision/recall values, making it easy to audit trade-offs before updating `models/detector_params.json`.
+The `results` struct contains per-combination precision/recall values, making it easy to audit trade-offs before updating `models/detector_params.json`. When coherence weighting settings change, regenerate calibrator features and retrain the calibrator because the feature distributions shift.

@@ -13,9 +13,9 @@ if exist(output_dir, 'dir') ~= 7
     mkdir(output_dir);
 end
 
-% wav_path = '/Users/matt/Documents/Zhao Lab/audio/M93A_S105_little_clip.wav';
+wav_path = '/Users/matt/Documents/Zhao Lab/audio/M93A_S105_little_clip.wav';
 
-wav_path = '/Users/matt/Documents/Zhao Lab/audio/little_clip_M93A_c_S178.wav';
+% wav_path = '/Users/matt/Documents/Zhao Lab/audio/little_clip_M93A_c_S178.wav';
 
 produced = [
     0.0 0.18;

@@ -14,8 +14,9 @@ y = bandpass_5to14k(x, fs);
 [win_samples, hop_samples] = window_parameters(params, fs);
 hop_seconds = hop_samples / fs;
 [S, f, ~] = frame_spectrogram(y, fs, win_samples, hop_samples);
-features = feat_energy_entropy_flux(S, f, struct('energy', params.BP, 'entropy', params.EntropyBand));
-self_mask = build_self_mask(size(S, 2), hop_seconds, produced, params.SelfPadPre, params.SelfPadPost);
+[S_weighted, coherence_map] = coherence_weight_spectrogram(S, f, hop_seconds, params.Coherence);
+features = feat_energy_entropy_flux(S_weighted, f, struct('energy', params.BP, 'entropy', params.EntropyBand));
+self_mask = build_self_mask(size(S_weighted, 2), hop_seconds, produced, params.SelfPadPre, params.SelfPadPost);
 
 % run hysteresis detection and tidy resulting segments.
 [frame_in, thresh] = adaptive_hysteresis(features.energy, features.entropy, features.flux, features.tonal_ratio, self_mask, params);
@@ -24,7 +25,7 @@ segs = filter_by_entropy_coverage(segs, features.entropy, hop_seconds, thresh.en
 segs = postprocess_segments(segs, params);
 if params.UseCalibrator && ~isempty(params.CalibratorPath)
     model = load_calibrator(params.CalibratorPath);
-    segs = filter_with_calibrator(segs, x, fs, model);
+    segs = filter_with_calibrator(segs, x, fs, model, params.Coherence);
 end
 segs = remove_overlaps(segs, produced);
 heard_labels = segs;
@@ -56,6 +57,17 @@ if ~isstruct(params) || ~isscalar(params)
     error('run_detect_heard:InvalidParams', 'params must be a scalar struct.');
 end
 % backgroundtrim keeps noisy bursts from skewing thresholds later on.
+coherence_defaults = struct(...
+    'Enabled', true, ...
+    'LogOffset', 1e-8, ...
+    'GradKernel', 'central', ...
+    'SigmaTime', 1.0, ...
+    'SigmaFreq', 1.0, ...
+    'TruncationRadius', 3, ...
+    'Gain', 1.0, ...
+    'Exponent', 1.0, ...
+    'Clip', [0 1] ...
+    );
 defaults = struct(...
     'FsTarget', 48000, ...
     'Win', 0.025, ...
@@ -80,7 +92,8 @@ defaults = struct(...
     'SelfPadPre', 0.001, ...
     'SelfPadPost', 0.001, ...
     'UseCalibrator', false, ...
-    'CalibratorPath', "" ...
+    'CalibratorPath', "", ...
+    'Coherence', coherence_defaults ...
     );
 fields = fieldnames(defaults);
 for idx = 1:numel(fields)
@@ -123,6 +136,50 @@ if params.UseCalibrator
         error('run_detect_heard:InvalidCalibratorPath', 'CalibratorPath must be a char vector or string scalar when UseCalibrator is true.');
     end
 end
+params.Coherence = fill_coherence_defaults(params.Coherence);
+end
+
+function coherence = fill_coherence_defaults(coherence)
+defaults = struct(...
+    'Enabled', true, ...
+    'LogOffset', 1e-8, ...
+    'GradKernel', 'central', ...
+    'SigmaTime', 1.0, ...
+    'SigmaFreq', 1.0, ...
+    'TruncationRadius', 3, ...
+    'Gain', 1.0, ...
+    'Exponent', 1.0, ...
+    'Clip', [0 1] ...
+    );
+fields = fieldnames(defaults);
+for idx = 1:numel(fields)
+    name = fields{idx};
+    if ~isfield(coherence, name) || isempty(coherence.(name))
+        coherence.(name) = defaults.(name);
+    end
+end
+validateattributes(coherence.Enabled, {'logical', 'numeric'}, {'scalar'});
+coherence.Enabled = logical(coherence.Enabled);
+validateattributes(coherence.LogOffset, {'numeric'}, {'scalar', 'real', '>', 0});
+if ischar(coherence.GradKernel) || (isstring(coherence.GradKernel) && isscalar(coherence.GradKernel))
+    coherence.GradKernel = char(coherence.GradKernel);
+else
+    error('run_detect_heard:InvalidCoherenceKernel', 'Coherence.GradKernel must be a string.');
+end
+validateattributes(coherence.SigmaTime, {'numeric'}, {'scalar', '>=', 0});
+validateattributes(coherence.SigmaFreq, {'numeric'}, {'scalar', '>=', 0});
+validateattributes(coherence.TruncationRadius, {'numeric'}, {'scalar', 'integer', '>=', 1});
+validateattributes(coherence.Gain, {'numeric'}, {'scalar', 'real', '>=', 0});
+validateattributes(coherence.Exponent, {'numeric'}, {'scalar', 'real', '>=', 0});
+if isempty(coherence.Clip)
+    coherence.Clip = [-inf inf];
+else
+    validateattributes(coherence.Clip, {'numeric'}, {'vector', 'numel', 2, 'real'});
+    if coherence.Clip(1) > coherence.Clip(2)
+        error('run_detect_heard:InvalidCoherenceClip', 'Coherence.Clip bounds must be non-decreasing.');
+    end
+end
+coherence.Clip = double(coherence.Clip);
 end
 
 function [x, fs] = ensure_sample_rate(x, fs, target)
@@ -206,7 +263,7 @@ model = data.model;
 cache(key) = model;
 end
 
-function segs = filter_with_calibrator(segs, x, fs, model)
+function segs = filter_with_calibrator(segs, x, fs, model, coherence_params)
 if isempty(segs)
     return;
 end
@@ -214,7 +271,7 @@ end
 num_segments = size(segs, 1);
 feature_rows = zeros(num_segments, 16);
 for idx = 1:num_segments
-    feature_rows(idx, :) = segment_features(x, fs, segs(idx, :), struct());
+    feature_rows(idx, :) = segment_features(x, fs, segs(idx, :), struct('Coherence', coherence_params));
 end
 
 [keep_idx, ~] = apply_calibrator(model, feature_rows);

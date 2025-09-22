@@ -87,7 +87,8 @@ defaults = struct(...
     'MinOverlapFraction', 0.10, ...
     'MinSilenceDuration', 0.10, ...
     'IgnoreUnlabeled', true, ...
-    'DetectorCandidates', [] ...
+    'DetectorCandidates', [], ...
+    'Coherence', coherence_defaults_ingest() ...
     );
 fields = fieldnames(defaults);
 for idx = 1:numel(fields)
@@ -101,6 +102,7 @@ validateattributes(opts.MinOverlapFraction, {'numeric'}, {'scalar', '>=', 0, '<=
 validateattributes(opts.MinSilenceDuration, {'numeric'}, {'scalar', '>=', 0});
 validateattributes(opts.IgnoreUnlabeled, {'numeric', 'logical'}, {'scalar'});
 opts.IgnoreUnlabeled = logical(opts.IgnoreUnlabeled);
+opts.Coherence = validate_coherence_ingest(opts.Coherence);
 if ~isempty(opts.DetectorCandidates)
     opts.DetectorCandidates = validate_candidates(opts.DetectorCandidates);
 else
@@ -130,6 +132,56 @@ if ischar(input) || (isstring(input) && isscalar(input))
     return;
 end
 error('ingest_session_for_calibrator:UnsupportedIntervalInput', 'unsupported label input type.');
+end
+
+function opts = coherence_defaults_ingest()
+opts = struct(...
+    'Enabled', true, ...
+    'LogOffset', 1e-8, ...
+    'GradKernel', 'central', ...
+    'SigmaTime', 1.0, ...
+    'SigmaFreq', 1.0, ...
+    'TruncationRadius', 3, ...
+    'Gain', 1.0, ...
+    'Exponent', 1.0, ...
+    'Clip', [0 1] ...
+    );
+end
+
+function opts = validate_coherence_ingest(opts)
+if ~isstruct(opts)
+    error('ingest_session_for_calibrator:InvalidCoherence', 'Coherence must be a struct.');
+end
+defaults = coherence_defaults_ingest();
+fields = fieldnames(defaults);
+for idx = 1:numel(fields)
+    name = fields{idx};
+    if ~isfield(opts, name) || isempty(opts.(name))
+        opts.(name) = defaults.(name);
+    end
+end
+validateattributes(opts.Enabled, {'logical', 'numeric'}, {'scalar'});
+opts.Enabled = logical(opts.Enabled);
+validateattributes(opts.LogOffset, {'numeric'}, {'scalar', 'real', '>', 0});
+if ischar(opts.GradKernel) || (isstring(opts.GradKernel) && isscalar(opts.GradKernel))
+    opts.GradKernel = char(opts.GradKernel);
+else
+    error('ingest_session_for_calibrator:InvalidCoherenceKernel', 'Coherence.GradKernel must be a string.');
+end
+validateattributes(opts.SigmaTime, {'numeric'}, {'scalar', '>=', 0});
+validateattributes(opts.SigmaFreq, {'numeric'}, {'scalar', '>=', 0});
+validateattributes(opts.TruncationRadius, {'numeric'}, {'scalar', 'integer', '>=', 1});
+validateattributes(opts.Gain, {'numeric'}, {'scalar', 'real', '>=', 0});
+validateattributes(opts.Exponent, {'numeric'}, {'scalar', 'real', '>=', 0});
+if isempty(opts.Clip)
+    opts.Clip = [-inf inf];
+else
+    validateattributes(opts.Clip, {'numeric'}, {'vector', 'numel', 2, 'real'});
+    if opts.Clip(1) > opts.Clip(2)
+        error('ingest_session_for_calibrator:InvalidCoherenceClip', 'Coherence.Clip bounds must be non-decreasing.');
+    end
+end
+opts.Clip = double(opts.Clip);
 end
 
 function segments = validate_candidates(value)
@@ -172,7 +224,7 @@ for idx = 1:size(segments, 1)
         end
     end
 
-    feats = segment_features(x, fs, seg, struct());
+    feats = segment_features(x, fs, seg, struct('Coherence', opts.Coherence));
 
     duration = max(0, seg(2) - seg(1));
     overlap = max_overlap_fraction(seg, heard, duration);

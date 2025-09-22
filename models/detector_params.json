@@ -28,5 +28,19 @@
   "UseCalibrator": false,
   "CalibratorPath": "",
   "BroadbandEntropySlack": 0.35,
-  "BroadbandTonalityQuantile": 0.1
+  "BroadbandTonalityQuantile": 0.1,
+  "Coherence": {
+    "Enabled": true,
+    "LogOffset": 1e-08,
+    "GradKernel": "central",
+    "SigmaTime": 1.0,
+    "SigmaFreq": 1.0,
+    "TruncationRadius": 3,
+    "Gain": 1.0,
+    "Exponent": 1.0,
+    "Clip": [
+      0.0,
+      1.0
+    ]
+  }
 }
