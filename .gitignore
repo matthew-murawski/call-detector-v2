@@ -34,3 +34,15 @@ docs/session_index.csv
 
 # notebooks / live scripts outputs
 *.mlx
+output/demo_detected_labels.txt
+models/features_S99.mat
+models/features_S74.mat
+models/features_S70.mat
+models/features_S66.mat
+models/features_S31.mat
+models/features_S191.mat
+models/features_S183.mat
+models/features_S179.mat
+models/features_S178.mat
+models/features_S102.mat
+models/calibrator.mat
