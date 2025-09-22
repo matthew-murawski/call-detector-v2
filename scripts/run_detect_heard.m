@@ -21,7 +21,7 @@ self_mask = build_self_mask(size(S_weighted, 2), hop_seconds, produced, params.S
 % run hysteresis detection and tidy resulting segments.
 [frame_in, thresh] = adaptive_hysteresis(features.energy, features.entropy, features.flux, features.tonal_ratio, self_mask, params);
 segs = frames_to_segments(frame_in, hop_seconds);
-segs = filter_by_entropy_coverage(segs, features.entropy, hop_seconds, thresh.entropy_thr, params.MinEntropyCoverage);
+segs = filter_by_entropy_coverage(segs, features.entropy, hop_seconds, thresh.entropy_thr, params.MinEntropyCoverage, features.tonal_ratio, thresh.broadband_entropy_thr, thresh.broadband_tonal_thr);
 segs = postprocess_segments(segs, params);
 if params.UseCalibrator && ~isempty(params.CalibratorPath)
     model = load_calibrator(params.CalibratorPath);

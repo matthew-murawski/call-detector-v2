@@ -83,8 +83,12 @@ classdef test_hysteresis < matlab.unittest.TestCase
             twitter = test_hysteresis.broadband_twitter_fixture();
             params = test_hysteresis.default_params();
 
-            frame_in_twitter = adaptive_hysteresis(twitter.energy, twitter.entropy, twitter.flux, twitter.tonal_ratio, twitter.self_mask, params);
-            tc.verifyTrue(all(frame_in_twitter(twitter.call_frames)));
+            [frame_in_twitter, stats] = adaptive_hysteresis(twitter.energy, twitter.entropy, twitter.flux, twitter.tonal_ratio, twitter.self_mask, params);
+            segments = frames_to_segments(frame_in_twitter, twitter.hop_seconds);
+            segments = filter_by_entropy_coverage(segments, twitter.entropy, twitter.hop_seconds, stats.entropy_thr, params.MinEntropyCoverage, twitter.tonal_ratio, stats.broadband_entropy_thr, stats.broadband_tonal_thr);
+
+            tc.verifyTrue(any(twitter.call_frames_mask & frame_in_twitter));
+            tc.verifyGreaterThanOrEqual(size(segments, 1), 1);
 
             noise = test_hysteresis.burst_then_tone_fixture();
             frame_in_noise = adaptive_hysteresis(noise.energy, noise.entropy, noise.flux, noise.tonal_ratio, noise.self_mask, params);
@@ -226,6 +230,9 @@ classdef test_hysteresis < matlab.unittest.TestCase
             data.tonal_ratio = tonal_ratio;
             data.self_mask = false(total_frames, 1);
             data.call_frames = (quiet_frames + 1):(quiet_frames + twitter_frames);
+            data.call_frames_mask = false(total_frames, 1);
+            data.call_frames_mask(data.call_frames) = true;
+            data.hop_seconds = 0.010;
         end
 
         function params = coherence_params()

@@ -3,17 +3,17 @@
 setup_paths();
 
 % list the feature table MAT files you want to include (add real paths).
-% feature_files = [
-%     "models/features_S178.mat"
-%     % "models/features_S66.mat"
-%     % "models/features_Session003.mat"
-% ];
+feature_files = [
+    "models/features_S178.mat"
+    % "models/features_S66.mat"
+    % "models/features_Session003.mat"
+];
 
-feature_files = list_feature_files('models');
-
-if isempty(feature_files)
-    error('train_calibrator_example:NoFiles', 'Add at least one feature file path.');
-end
+% feature_files = list_feature_files('models');
+% 
+% if isempty(feature_files)
+%     error('train_calibrator_example:NoFiles', 'Add at least one feature file path.');
+% end
 
 % Load and concatenate all tables.
 tables = cell(numel(feature_files), 1);
