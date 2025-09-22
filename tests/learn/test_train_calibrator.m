@@ -56,6 +56,29 @@ classdef test_train_calibrator < matlab.unittest.TestCase
             tc.verifyGreaterThanOrEqual(prec_tuned, prec_base);
             tc.verifyLessThanOrEqual(max(0, rec_base - rec_tuned), 0.1);
         end
+
+        function single_session_threshold_respects_true_positives(tc)
+            neg = [-1.0 -1.0; -0.9 -1.2; -1.2 -0.8; -0.95 -1.05; -1.1 -0.9; -0.85 -1.15];
+            pos = [1.0 1.0; 1.1 0.9; 0.9 1.2; 1.05 0.95; 1.2 0.85; 0.95 1.1];
+            feats = [neg; pos];
+            labels = [zeros(size(neg, 1), 1); ones(size(pos, 1), 1)];
+            sessions = categorical(repmat("S1", numel(labels), 1));
+
+            opts = struct('TargetRecall', 0.9);
+            model = train_calibrator(feats, labels, sessions, opts);
+
+            tc.verifyLessThan(model.Threshold, 1);
+            tc.verifyGreaterThan(model.Threshold, 0);
+
+            mu = model.Scaler.mu;
+            sigma = model.Scaler.sigma;
+            sigma(sigma == 0) = 1;
+            scores = (feats - mu) ./ sigma * model.Beta + model.Bias;
+            probs = 1 ./ (1 + exp(-scores));
+
+            tp_probs = probs(labels == 1);
+            tc.verifyGreaterThanOrEqual(min(tp_probs), model.Threshold);
+        end
     end
 
     methods (Static)

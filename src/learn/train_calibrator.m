@@ -40,12 +40,15 @@ full_model = fitclinear(Feat_std, Label, fitArgs{:});
 beta = full_model.Beta;
 bias = full_model.Bias;
 
-[cv_probs, cv_labels] = crossval_scores(Feat, Label, SessionID, fitArgs, opts.TargetRecall);
-
-threshold = choose_threshold(cv_probs, cv_labels, opts.TargetRecall);
-
 score_full = Feat_std * beta + bias;
 prob_full = sigmoid(score_full);
+
+[cv_probs, cv_labels] = crossval_scores(Feat, Label, SessionID, fitArgs, opts.TargetRecall);
+if numel(categories(SessionID)) < 2 || isempty(cv_probs)
+    threshold = choose_threshold(prob_full, Label, opts.TargetRecall);
+else
+    threshold = choose_threshold(cv_probs, cv_labels, opts.TargetRecall);
+end
 
 model = struct();
 model.Scaler = struct('mu', mu_full, 'sigma', sigma_full);
@@ -154,11 +157,6 @@ for idx = 1:numel(unique_sessions)
 
     probs = [probs; fold_probs]; %#ok<AGROW>
     labels = [labels; y(test_mask)]; %#ok<AGROW>
-end
-
-if isempty(probs)
-    probs = y; % fallback to labels to avoid empty downstream.
-    labels = y;
 end
 
 end
