@@ -51,6 +51,12 @@ end
 if ~isfield(params, 'TonalityQuantileStay') || isempty(params.TonalityQuantileStay)
     params.TonalityQuantileStay = 0.60;
 end
+if ~isfield(params, 'BroadbandEntropySlack') || isempty(params.BroadbandEntropySlack)
+    params.BroadbandEntropySlack = 0;
+end
+if ~isfield(params, 'BroadbandTonalityQuantile') || isempty(params.BroadbandTonalityQuantile)
+    params.BroadbandTonalityQuantile = 0;
+end
 validateattributes(params.MAD_Tlow, {'numeric'}, {'scalar', 'real', 'nonnegative'}, mfilename, 'params.MAD_Tlow');
 validateattributes(params.MAD_Thigh, {'numeric'}, {'scalar', 'real', 'nonnegative', '>=', params.MAD_Tlow}, mfilename, 'params.MAD_Thigh');
 validateattributes(params.BackgroundTrim, {'numeric'}, {'scalar', '>', 0, '<=', 1}, mfilename, 'params.BackgroundTrim');
@@ -65,6 +71,8 @@ validateattributes(params.TonalityQuantileStay, {'numeric'}, {'scalar', '>', 0, 
 if params.TonalityQuantileStay > params.TonalityQuantileEnter
     error('adaptive_hysteresis:InvalidTonalityQuantiles', 'TonalityQuantileStay must be <= TonalityQuantileEnter.');
 end
+validateattributes(params.BroadbandEntropySlack, {'numeric'}, {'scalar', '>=', 0}, mfilename, 'params.BroadbandEntropySlack');
+validateattributes(params.BroadbandTonalityQuantile, {'numeric'}, {'scalar', '>=', 0, '<=', 1}, mfilename, 'params.BroadbandTonalityQuantile');
 
 %% sanitise feature values
 energy(~isfinite(energy)) = 0;
@@ -139,9 +147,32 @@ if isnan(tonal_stay_thr)
     tonal_stay_thr = 0;
 end
 
+broadband_entropy_thr = entropy_thr + params.BroadbandEntropySlack;
+if params.BroadbandTonalityQuantile > 0
+    broadband_tonal_thr = local_quantile(bg_tonal, params.BroadbandTonalityQuantile);
+    if isnan(broadband_tonal_thr)
+        broadband_tonal_thr = 0;
+    end
+else
+    broadband_tonal_thr = -inf;
+end
+
 %% hysteresis evaluation
-enter_cond = (energy > Thigh) & (entropy < entropy_thr) & (flux > flux_enter_thr) & (tonal_ratio > tonal_enter_thr);
-stay_cond = (((energy > Tlow) & (flux > flux_stay_thr)) | (entropy < entropy_thr)) & (tonal_ratio > tonal_stay_thr);
+tonal_relaxed_enter = (params.BroadbandTonalityQuantile > 0) & (tonal_ratio <= broadband_tonal_thr);
+entropy_relaxed = (params.BroadbandEntropySlack > 0) & tonal_relaxed_enter & (entropy <= broadband_entropy_thr);
+tonal_relaxed_stay = tonal_relaxed_enter;
+
+entropy_ok_enter = (entropy < entropy_thr) | ((energy > Thigh) & (flux > flux_enter_thr) & entropy_relaxed);
+tonal_ok_enter = (tonal_ratio > tonal_enter_thr) | ((energy > Thigh) & (flux > flux_enter_thr) & tonal_relaxed_enter);
+
+enter_cond = (energy > Thigh) & (flux > flux_enter_thr) & entropy_ok_enter & tonal_ok_enter;
+
+stay_energy_flux = (energy > Tlow) & (flux > flux_stay_thr);
+entropy_relaxed_stay = (params.BroadbandEntropySlack > 0) & tonal_relaxed_stay & (entropy <= broadband_entropy_thr);
+entropy_ok_stay = (entropy < entropy_thr) | (stay_energy_flux & entropy_relaxed_stay);
+tonal_ok_stay = (tonal_ratio > tonal_stay_thr) | (stay_energy_flux & tonal_relaxed_stay);
+
+stay_cond = (stay_energy_flux | entropy_ok_stay) & tonal_ok_stay;
 
 frame_in = false(size(energy));
 state = false;
@@ -166,7 +197,8 @@ end
 if nargout > 1
     stats = struct('Tlow', Tlow, 'Thigh', Thigh, 'entropy_thr', entropy_thr, ...
         'flux_enter_thr', flux_enter_thr, 'flux_stay_thr', flux_stay_thr, ...
-        'tonal_enter_thr', tonal_enter_thr, 'tonal_stay_thr', tonal_stay_thr);
+        'tonal_enter_thr', tonal_enter_thr, 'tonal_stay_thr', tonal_stay_thr, ...
+        'broadband_entropy_thr', broadband_entropy_thr, 'broadband_tonal_thr', broadband_tonal_thr);
 end
 end
 

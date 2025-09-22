@@ -78,22 +78,36 @@ classdef test_hysteresis < matlab.unittest.TestCase
             tc.verifyTrue(all(frame_in(data.call_frames)));
             tc.verifyFalse(any(frame_in(data.noise_frames)));
         end
+
+        function broadband_twitter_recovered(tc)
+            twitter = test_hysteresis.broadband_twitter_fixture();
+            params = test_hysteresis.default_params();
+
+            frame_in_twitter = adaptive_hysteresis(twitter.energy, twitter.entropy, twitter.flux, twitter.tonal_ratio, twitter.self_mask, params);
+            tc.verifyTrue(all(frame_in_twitter(twitter.call_frames)));
+
+            noise = test_hysteresis.burst_then_tone_fixture();
+            frame_in_noise = adaptive_hysteresis(noise.energy, noise.entropy, noise.flux, noise.tonal_ratio, noise.self_mask, params);
+            tc.verifyFalse(any(frame_in_noise(noise.noise_frames)));
+        end
     end
 
     methods (Static, Access = private)
         function params = default_params()
             params.MAD_Tlow = 2.0;
             params.MAD_Thigh = 3.5;
-            params.EntropyQuantile = 0.20;
+            params.EntropyQuantile = 0.40;
             params.FluxQuantileEnter = 0.70;
             params.FluxQuantileStay = 0.40;
-            params.TonalityQuantileEnter = 0.80;
-            params.TonalityQuantileStay = 0.60;
+            params.TonalityQuantileEnter = 0.78;
+            params.TonalityQuantileStay = 0.55;
+            params.BroadbandEntropySlack = 0.35;
+            params.BroadbandTonalityQuantile = 0.10;
             params.MinDur = 0.05;
             params.MaxDur = 0.80;
             params.MergeGap = 0.040;
             params.CloseHole = 0.020;
-            params.MinEntropyCoverage = 0.40;
+            params.MinEntropyCoverage = 0.35;
             params.BackgroundTrim = 0.95;
         end
 
@@ -185,6 +199,32 @@ classdef test_hysteresis < matlab.unittest.TestCase
             data.self_mask = false(total_frames, 1);
             data.call_frames = (noise_frames + 1):total_frames;
             data.noise_frames = (1:noise_frames).';
+        end
+
+        function data = broadband_twitter_fixture()
+            quiet_frames = 80;
+            twitter_frames = 12;
+            tail_frames = 8;
+            total_frames = quiet_frames + twitter_frames + tail_frames;
+
+            energy = ones(total_frames, 1) * 1.0;
+            energy(quiet_frames + (1:twitter_frames)) = 7.5;
+
+            entropy = ones(total_frames, 1) * 0.6;
+            entropy(quiet_frames + (1:twitter_frames)) = 0.92;
+
+            flux = ones(total_frames, 1) * 0.3;
+            flux(quiet_frames + (1:twitter_frames)) = 3.8;
+
+            tonal_ratio = ones(total_frames, 1) * 0.25;
+            tonal_ratio(quiet_frames + (1:twitter_frames)) = 0.05;
+
+            data.energy = energy;
+            data.entropy = entropy;
+            data.flux = flux;
+            data.tonal_ratio = tonal_ratio;
+            data.self_mask = false(total_frames, 1);
+            data.call_frames = (quiet_frames + 1):(quiet_frames + twitter_frames);
         end
     end
 end
