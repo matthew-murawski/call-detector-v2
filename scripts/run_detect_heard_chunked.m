@@ -80,7 +80,7 @@ end
 
 if strlength(outLabelPath) > 0
     labels = repmat("HEARD", size(segs, 1), 1);
-    write_audacity_labels(char(outLabelPath), segs, labels);
+    write_audacity_labels(char(outLabelPath), segs);
 end
 
 if useNoiseMask && writeNoiseLabels

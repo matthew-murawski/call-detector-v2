@@ -1,28 +1,31 @@
 function write_audacity_labels(path, intervals, labels)
 % write audacity label track with 6 decimal places.
+% if labels are not provided, only write start/end columns (no third column).
+
 %% validate inputs
-if nargin < 3
-    error('write_audacity_labels:MissingInput', 'All inputs are required.');
+if nargin < 2
+    error('write_audacity_labels:MissingInput', 'Path and intervals are required.');
 end
 if ~(ischar(path) || (isstring(path) && isscalar(path)))
     error('write_audacity_labels:InvalidPath', 'Path must be a character vector or string scalar.');
 end
 validateattributes(intervals, {'numeric'}, {'2d', 'ncols', 2}, mfilename, 'intervals');
-if ~(isstring(labels) || iscellstr(labels) || (iscell(labels) && all(cellfun(@ischar, labels))))
-    error('write_audacity_labels:InvalidLabels', 'Labels must be a string array or cell array of character vectors.');
+
+labels_provided = (nargin >= 3) && ~isempty(labels);
+if labels_provided
+    if ~(isstring(labels) || iscellstr(labels) || (iscell(labels) && all(cellfun(@ischar, labels))))
+        error('write_audacity_labels:InvalidLabels', 'Labels must be a string array or cell array of character vectors.');
+    end
 end
 
 %% normalize inputs
 path = char(path);
 intervals = double(intervals);
-if iscell(labels)
-    labels = string(labels);
-else
-    labels = string(labels);
-end
-labels = labels(:);
-if size(intervals, 1) ~= numel(labels)
-    error('write_audacity_labels:SizeMismatch', 'Intervals and labels must have the same number of rows.');
+if labels_provided
+    if size(intervals, 1) ~= numel(labels)
+        error('write_audacity_labels:SizeMismatch', 'Intervals and labels must have the same number of rows.');
+    end
+    labels = string(labels); % normalize to string array
 end
 
 %% validate values
@@ -45,11 +48,21 @@ if fid == -1
     error('write_audacity_labels:FileOpenFailed', 'Could not open file for writing: %s', path);
 end
 cleaner = onCleanup(@() fclose(fid));
-for idx = 1:size(intervals, 1)
-    label = labels(idx);
-    if ismissing(label)
-        label = "";
+
+if labels_provided
+    for idx = 1:size(intervals, 1)
+        lbl = labels(idx);
+        if ismissing(lbl)
+            lbl = "";
+        end
+        % strip any newline/tab just in case
+        lbl = replace(replace(lbl, newline, ' '), sprintf('\t'), ' ');
+        fprintf(fid, '%.6f\t%.6f\t%s\n', intervals(idx, 1), intervals(idx, 2), char(lbl));
     end
-    fprintf(fid, '%.6f\t%.6f\t%s\n', intervals(idx, 1), intervals(idx, 2), char(label));
+else
+    % no labels: write only start/end columns
+    for idx = 1:size(intervals, 1)
+        fprintf(fid, '%.6f\t%.6f\n', intervals(idx, 1), intervals(idx, 2));
+    end
 end
 end

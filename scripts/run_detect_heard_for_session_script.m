@@ -59,7 +59,7 @@ function heard = run_detect_heard_for_session(session)
 
     % also mirror the produced/self labels into output for convenience
     if ~isempty(produced)
-        write_labels_or_fallback(produced_label_path, produced, 'SELF');
+        write_labels_or_fallback(produced_label_path, produced);
     end
 
     % print a short summary for quick feedback
@@ -154,12 +154,11 @@ function ab = extract_first_two(L)
     error('unrecognized output from read_audacity_labels');
 end
 
-function write_labels_or_fallback(out_path, intervals, label_text)
+function write_labels_or_fallback(out_path, intervals)
 % try project writer, else write a simple 3-column tsv
     if exist('write_audacity_labels', 'file') == 2
         try
-            lbls = repmat(string(label_text), size(intervals,1), 1);
-            write_audacity_labels(out_path, intervals, lbls);
+            write_audacity_labels(out_path, intervals);
             return;
         catch
             % fall through to tsv
@@ -172,6 +171,6 @@ function write_labels_or_fallback(out_path, intervals, label_text)
     end
     c = onCleanup(@() fclose(fid));
     for i = 1:size(intervals,1)
-        fprintf(fid, '%.6f\t%.6f\t%s\n', intervals(i,1), intervals(i,2), label_text);
+        fprintf(fid, '%.6f\t%.6f\t%s\n', intervals(i,1), intervals(i,2));
     end
 end
