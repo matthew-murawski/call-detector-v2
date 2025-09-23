@@ -1,5 +1,7 @@
 # Agent Instructions
 
+Consult BLUEPRINT.md for development blueprint.
+
 ## Commenting in MATLAB Files
 - keep comments in lowercase, with uppercase allowed only for abbreviations (e.g., `ACC`).
 - provide two types of comments:
