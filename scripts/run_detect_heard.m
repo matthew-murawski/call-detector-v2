@@ -2,10 +2,10 @@ function heard_labels = run_detect_heard(wavInput, producedInput, outLabelPath, 
 % orchestrate the mvp heard-call detector.
 
 narginchk(4, 4);
+add_local_paths();
 params = apply_defaults(params);
 
 % decode inputs and prepare dependencies.
-add_local_paths();
 [x, fs] = read_audio(wavInput);
 [x, fs] = ensure_sample_rate(x, fs, params.FsTarget);
 produced = normalise_intervals(producedInput);
@@ -13,11 +13,28 @@ produced = normalise_intervals(producedInput);
 y = bandpass_5to14k(x, fs);
 [win_samples, hop_samples] = window_parameters(params, fs);
 hop_seconds = hop_samples / fs;
-[S, f, ~] = frame_spectrogram(y, fs, win_samples, hop_samples);
+[S, f, frame_time] = frame_spectrogram(y, fs, win_samples, hop_samples);
 [S_weighted, coherence_map] = coherence_weight_spectrogram(S, f, hop_seconds, params.Coherence);
 S_focus = apply_spectral_focus(S_weighted, f, params.FocusBand);
 features = feat_energy_entropy_flux(S_focus, f, struct('energy', params.BP, 'entropy', params.EntropyBand));
+frame_time = frame_time(:).';
 self_mask = build_self_mask(size(S_weighted, 2), hop_seconds, produced, params.SelfPadPre, params.SelfPadPost);
+
+if params.UseNoiseMask
+    noiseParamsLocal = normalise_noise_params(params.NoiseParams, fs, params.NoiseLabelPath, params.UseNoiseMask);
+    [~, noiseSegments] = run_detect_noise(x, fs, noiseParamsLocal);
+    noise_mask = noise_segments_to_mask(noiseSegments, frame_time);
+    noise_mask = reshape(noise_mask, [], 1);
+    if numel(noise_mask) < numel(self_mask)
+        noise_mask(end+1:numel(self_mask)) = false;
+    elseif numel(noise_mask) > numel(self_mask)
+        noise_mask = noise_mask(1:numel(self_mask));
+    end
+else
+    noise_mask = false(size(self_mask));
+end
+
+self_mask = logical(self_mask) | logical(noise_mask);
 
 % run hysteresis detection and tidy resulting segments.
 [frame_in, thresh] = adaptive_hysteresis(features.energy, features.entropy, features.flux, features.tonal_ratio, features.flatness, self_mask, params);
@@ -48,6 +65,7 @@ if isempty(has_added)
     addpath(fullfile(root_dir, 'src', 'mask'));
     addpath(fullfile(root_dir, 'src', 'label'));
     addpath(fullfile(root_dir, 'src', 'features'));
+    addpath(fullfile(root_dir, 'src', 'noise'));
     addpath(fullfile(root_dir, 'src', 'learn'));
     has_added = true;
 end
@@ -97,7 +115,10 @@ defaults = struct(...
     'SelfPadPost', 0.001, ...
     'UseCalibrator', false, ...
     'CalibratorPath', "", ...
-    'Coherence', coherence_defaults ...
+    'Coherence', coherence_defaults, ...
+    'UseNoiseMask', false, ...
+    'NoiseParams', [], ...
+    'NoiseLabelPath', "" ...
     );
 fields = fieldnames(defaults);
 for idx = 1:numel(fields)
@@ -150,6 +171,62 @@ if params.UseCalibrator
     end
 end
 params.Coherence = fill_coherence_defaults(params.Coherence);
+
+if ~isfield(params, 'UseNoiseMask') || isempty(params.UseNoiseMask)
+    params.UseNoiseMask = false;
+end
+params.UseNoiseMask = logical(params.UseNoiseMask);
+
+if ~isfield(params, 'NoiseParams') || isempty(params.NoiseParams)
+    if exist('NoiseParams', 'file') ~= 2
+        script_dir = fileparts(mfilename('fullpath'));
+        root_dir = fileparts(script_dir);
+        addpath(fullfile(root_dir, 'src', 'noise'));
+    end
+    params.NoiseParams = NoiseParams(params.FsTarget);
+end
+if ~isstruct(params.NoiseParams) || ~isscalar(params.NoiseParams)
+    error('run_detect_heard:InvalidNoiseParams', 'NoiseParams must be a scalar struct.');
+end
+
+if ~isfield(params, 'NoiseLabelPath') || isempty(params.NoiseLabelPath)
+    params.NoiseLabelPath = "";
+end
+if ~(ischar(params.NoiseLabelPath) || (isstring(params.NoiseLabelPath) && isscalar(params.NoiseLabelPath)))
+    error('run_detect_heard:InvalidNoiseLabelPath', 'NoiseLabelPath must be a char vector or string scalar.');
+end
+end
+
+function noiseParams = normalise_noise_params(noiseParams, fs, labelPath, useNoiseMask)
+if ~isstruct(noiseParams) || ~isscalar(noiseParams)
+    error('run_detect_heard:InvalidNoiseParams', 'NoiseParams must be a scalar struct.');
+end
+noiseParams.SampleRate = fs;
+if ~isfield(noiseParams, 'Output') || isempty(noiseParams.Output)
+    noiseParams.Output = struct();
+end
+if ~isfield(noiseParams.Output, 'WriteNoiseLabels') || isempty(noiseParams.Output.WriteNoiseLabels)
+    noiseParams.Output.WriteNoiseLabels = false;
+end
+
+if nargin >= 3
+    if isstring(labelPath)
+        labelStr = string(labelPath);
+    elseif ischar(labelPath)
+        labelStr = string(labelPath);
+    else
+        labelStr = string("");
+    end
+    hasLabel = useNoiseMask && strlength(labelStr) > 0;
+    noiseParams.Output.WriteNoiseLabels = hasLabel;
+    if hasLabel
+        noiseParams.Output.LabelPath = char(labelStr);
+    else
+        if isfield(noiseParams.Output, 'LabelPath')
+            noiseParams.Output.LabelPath = "";
+        end
+    end
+end
 end
 
 function coherence = fill_coherence_defaults(coherence)

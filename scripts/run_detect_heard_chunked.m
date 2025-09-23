@@ -2,6 +2,7 @@ function segs = run_detect_heard_chunked(wavPath, producedInput, outLabelPath, p
 % run_detect_heard_chunked runs the heard-call detector over a long wav by chunking in time.
 
 narginchk(1, 5);
+add_chunk_paths();
 if nargin < 2
     producedInput = [];
 end
@@ -9,7 +10,7 @@ if nargin < 3
     outLabelPath = "";
 end
 if nargin < 4 || isempty(params)
-    params = struct();
+params = struct();
 end
 if nargin < 5 || isempty(chunkSeconds)
     chunkSeconds = 300;
@@ -30,6 +31,25 @@ produced_all = normalise_intervals(producedInput);
 
 segs = zeros(0, 2);
 
+useNoiseMask = isfield(params, 'UseNoiseMask') && logical(params.UseNoiseMask);
+writeNoiseLabels = false;
+if useNoiseMask && isfield(params, 'NoiseLabelPath')
+    labelStr = params.NoiseLabelPath;
+    if isstring(labelStr)
+        writeNoiseLabels = strlength(labelStr) > 0;
+    elseif ischar(labelStr)
+        writeNoiseLabels = ~isempty(labelStr);
+    end
+end
+
+paramsChunk = params;
+if useNoiseMask
+    paramsChunk.NoiseLabelPath = "";
+    if isfield(paramsChunk, 'NoiseParams') && isstruct(paramsChunk.NoiseParams)
+        paramsChunk.NoiseParams = disable_noise_label(paramsChunk.NoiseParams);
+    end
+end
+
 offsetSamples = 0;
 chunkIndex = 0;
 while offsetSamples < totalSamples
@@ -46,7 +66,7 @@ while offsetSamples < totalSamples
     produced_chunk = produced_chunk - chunkStartTime;
 
     audioStruct = struct('x', xChunk, 'fs', fsChunk);
-    segs_chunk = run_detect_heard(audioStruct, produced_chunk, "", params);
+    segs_chunk = run_detect_heard(audioStruct, produced_chunk, "", paramsChunk);
 
     if ~isempty(segs_chunk)
         segs_chunk = segs_chunk + chunkStartTime;
@@ -63,7 +83,42 @@ if strlength(outLabelPath) > 0
     write_audacity_labels(char(outLabelPath), segs, labels);
 end
 
+if useNoiseMask && writeNoiseLabels
+    noiseParamsLabel = params.NoiseParams;
+    if ~isstruct(noiseParamsLabel) || ~isscalar(noiseParamsLabel)
+        noiseParamsLabel = NoiseParams(fs);
+    end
+    if ~isfield(noiseParamsLabel, 'Output') || isempty(noiseParamsLabel.Output)
+        noiseParamsLabel.Output = struct();
+    end
+    noiseParamsLabel.SampleRate = fs;
+    noiseParamsLabel.Output.WriteNoiseLabels = true;
+    noiseParamsLabel.Output.LabelPath = char(params.NoiseLabelPath);
+
+    edgeGuardNoise = min(chunkSeconds / 4, max(0.5, chunkSeconds * 0.05));
+    overlapNoise = max(2 * edgeGuardNoise, min(chunkSeconds / 2, 5));
+    if overlapNoise >= chunkSeconds
+        overlapNoise = max(chunkSeconds * 0.8, chunkSeconds - 1e-3);
+    end
+    noiseChunkOpts = struct('ChunkSec', chunkSeconds, ...
+        'OverlapSec', overlapNoise, ...
+        'EdgeGuardSec', edgeGuardNoise);
+
+    run_detect_noise_chunked(wavPath, noiseParamsLabel, noiseChunkOpts); %#ok<NASGU>
+end
+
 fprintf('[call-detector] completed %d chunks over %.1f minutes of audio\n', chunkIndex, totalSamples / fs / 60);
+end
+
+function add_chunk_paths()
+persistent has_paths
+if isempty(has_paths)
+    script_dir = fileparts(mfilename('fullpath'));
+    root_dir = fileparts(script_dir);
+    addpath(fullfile(root_dir, 'scripts'));
+    addpath(fullfile(root_dir, 'src', 'noise'));
+    has_paths = true;
+end
 end
 
 function intervals = normalise_intervals(input)
@@ -86,6 +141,19 @@ end
 validateattributes(input, {'numeric'}, {'2d', 'ncols', 2, 'real'}, mfilename, 'produced');
 intervals = double(input);
 intervals = sortrows(intervals, 1);
+end
+
+function out = disable_noise_label(noiseParams)
+if ~isstruct(noiseParams) || ~isscalar(noiseParams)
+    out = NoiseParams();
+else
+    out = noiseParams;
+end
+if ~isfield(out, 'Output') || isempty(out.Output)
+    out.Output = struct();
+end
+out.Output.WriteNoiseLabels = false;
+out.Output.LabelPath = "";
 end
 
 function trimmed = trim_intervals(intervals, startTime, endTime)
