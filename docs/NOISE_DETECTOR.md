@@ -1,6 +1,6 @@
 # Stage 0 Noise Detector
 
-Stage 0 is a broadband noise gate that runs ahead of the heard‑call detector. It scans the raw waveform for high-energy broadband spans, derives per-band statistics, and produces a mask of time intervals that downstream stages treat as preexisting noise. When Stage 0 is enabled, its mask is unioned with the existing produced/self mask so the main detector ignores regions that are dominated by broadband clutter.
+Stage 0 is a broadband noise gate that runs ahead of the heard‑call detector. It scans the raw waveform for high-energy broadband spans, derives per-band statistics, and produces intervals that describe likely noise. In the default **hard** mode, Stage 0’s mask is unioned with the existing produced/self mask so the main detector ignores regions dominated by broadband clutter. In **overlap** mode the mask is kept separate and only heard-call candidates that closely align with a noise interval are vetoed.
 
 ## Pipeline placement
 
@@ -13,7 +13,7 @@ Stage 0 is a broadband noise gate that runs ahead of the heard‑call detector. 
 7. **Hysteresis + segments/mask** – produces merged intervals and a frame-aligned logical mask (`src/noise/segments`).
 8. **Output** – mask, segments, metadata, optional NOISE label file (`src/noise/pipeline` + `src/noise/output`).
 
-These outputs are consumed by `run_detect_heard` (and the chunked variant), which merge Stage 0’s mask with the produced/self mask before hysteresis.
+These outputs are consumed by `run_detect_heard` (and the chunked variant). In hard mode the Stage 0 mask is merged with the produced/self mask before hysteresis. In overlap mode Stage 0 runs in parallel and the final heard-call segments are filtered against the noise intervals using configurable overlap tolerances.
 
 ## Parameters and guardrails
 
@@ -26,6 +26,8 @@ These outputs are consumed by `run_detect_heard` (and the chunked variant), whic
 - **Hysteresis** – min/max event length, gap closing, and pre/post padding in seconds.
 - **TonalityGuard** – enables a soft guard that requires both detectors to agree when strong tonal ridges are present.
 - **Output** – `WriteNoiseLabels` + `LabelPath` control optional NOISE label emission during orchestration.
+- **NoiseHandlingMode** – `"hard"` (default) unions the mask; `"overlap"` keeps the heard detector intact and vetoes calls that closely match a noise interval.
+- **NoiseDecision** – when `NoiseHandlingMode="overlap"`, `MinOverlapFrac`, `MaxStartDiff`, and `MaxEndDiff` tune how similar a heard segment must be to a noise segment before it is dropped.
 
 Validation is enforced by `validate_noise_params` to catch overlapping bands, invalid thresholds, and Nyquist violations. Stage 0 always clamps negative or NaN features to safe defaults.
 
@@ -35,6 +37,7 @@ Validation is enforced by `validate_noise_params` to catch overlapping bands, in
 - The default MAD thresholds assume moderate broadband coverage; for extremely quiet recordings tune `CoverageMin`/`FlatnessMin` upward.
 - Currently single-channel; ensure multi-channel audio is downmixed prior to the stage (handled automatically in orchestrators).
 - Label exporting is optional; if you need per-chunk labels during chunked runs, pass a `NoiseLabelPath` to `run_detect_heard_chunked`.
+- Overlap mode relies on reasonable thresholds—verify that both Stage 0 gates fire where expected before tightening the veto tolerances.
 
 ## Running Stage 0 manually
 
@@ -44,6 +47,7 @@ Validation is enforced by `validate_noise_params` to catch overlapping bands, in
   ```matlab
   segments = run_noise_on_wav_script('input.wav', 'noise_labels.txt');
   ```
+- **Heard-call pipeline**: enable Stage 0 by setting `params.UseNoiseMask = true;`. Choose `params.NoiseHandlingMode = "hard";` to keep the legacy behaviour or `"overlap"` to drop only heard segments that align with noise intervals (tune `params.NoiseDecision` as needed).
 
 ## Visualization and tuning
 

@@ -10,7 +10,13 @@ Stage 0 runs before the heard-call detector to suppress broadband clutter. Enabl
 params.UseNoiseMask = true;
 params.NoiseParams = NoiseParams(params.FsTarget); % customise as needed
 params.NoiseLabelPath = 'noise_labels.txt';        % optional NOISE labels (set "" to skip)
+params.NoiseHandlingMode = "hard";                % or "overlap" for post-filtering
+params.NoiseDecision = struct('MinOverlapFrac', 0.6, ...
+                              'MaxStartDiff', 0.12, ...
+                              'MaxEndDiff', 0.12);
 ```
+
+Use `NoiseHandlingMode = "hard"` (default) to union the noise mask with the produced/self mask. Switch to `"overlap"` to keep the detector intact and veto only those heard segments that closely align with Stage 0 noise intervals (tuned via `NoiseDecision`).
 
 To run Stage 0 on a waveform directly, use:
 

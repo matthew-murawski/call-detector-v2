@@ -2,7 +2,20 @@
 wavPath = '/Users/matt/Documents/Zhao Lab/audio/little_clip_M93A_c_S178.wav';
 outLabelPath = '/Users/matt/Documents/GitHub/call-detector-v2/output/demo/noise.txt';
 
-segments = run_noise_on_wav(wavPath, outLabelPath);
+fs = 48000;
+  p = NoiseParams(fs);
+  p.BandCoincidence.NRequired = 3;
+  p.BandCoincidence.RequireOOB = true;
+  p.BandThresholds.kEnter = 0.99;
+  p.BandThresholds.kExit  = 0.9;
+  p.Coverage.CoverageMin  = 0.12;
+  p.Flatness.FlatnessMin  = 0.18;
+  p.OOB.RatioMin          = 0.15;
+  p.TonalityGuard.Enable  = false;
+  p.TonalityGuard.InBandTonalityThresh = 0.999;   % default 0.65
+  p.TonalityGuard.Mode = 'soft';
+
+segments = run_noise_on_wav(wavPath, outLabelPath, p, struct('ChunkSec', 300, 'OverlapSec', 2, 'EdgeGuardSec', 0.25));
 
 function segments = run_noise_on_wav(wavPath, outLabelPath, noiseParams, chunkOpts)
 % run_noise_on_wav_script runs the stage 0 noise detector on a wav file and writes NOISE labels.

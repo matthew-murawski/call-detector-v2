@@ -20,21 +20,25 @@ features = feat_energy_entropy_flux(S_focus, f, struct('energy', params.BP, 'ent
 frame_time = frame_time(:).';
 self_mask = build_self_mask(size(S_weighted, 2), hop_seconds, produced, params.SelfPadPre, params.SelfPadPost);
 
+noise_mask = false(size(self_mask));
+noise_segments_stage0 = zeros(0, 2);
 if params.UseNoiseMask
     noiseParamsLocal = normalise_noise_params(params.NoiseParams, fs, params.NoiseLabelPath, params.UseNoiseMask);
-    [~, noiseSegments] = run_detect_noise(x, fs, noiseParamsLocal);
-    noise_mask = noise_segments_to_mask(noiseSegments, frame_time);
-    noise_mask = reshape(noise_mask, [], 1);
+    [noiseMaskStage0, noise_segments_stage0] = run_detect_noise(x, fs, noiseParamsLocal);
+    noise_mask = reshape(logical(noiseMaskStage0(:)), [], 1);
     if numel(noise_mask) < numel(self_mask)
         noise_mask(end+1:numel(self_mask)) = false;
     elseif numel(noise_mask) > numel(self_mask)
         noise_mask = noise_mask(1:numel(self_mask));
     end
+    if params.NoiseHandlingMode == "hard"
+        self_mask = logical(self_mask) | noise_mask;
+    else
+        self_mask = logical(self_mask);
+    end
 else
-    noise_mask = false(size(self_mask));
+    self_mask = logical(self_mask);
 end
-
-self_mask = logical(self_mask) | logical(noise_mask);
 
 % run hysteresis detection and tidy resulting segments.
 [frame_in, thresh] = adaptive_hysteresis(features.energy, features.entropy, features.flux, features.tonal_ratio, features.flatness, self_mask, params);
@@ -44,6 +48,9 @@ segs = postprocess_segments(segs, params);
 if params.UseCalibrator && ~isempty(params.CalibratorPath)
     model = load_calibrator(params.CalibratorPath);
     segs = filter_with_calibrator(segs, x, fs, model, params.Coherence);
+end
+if params.UseNoiseMask && params.NoiseHandlingMode == "overlap"
+    segs = filter_with_noise_segments(segs, noise_segments_stage0, params.NoiseDecision);
 end
 segs = remove_overlaps(segs, produced);
 heard_labels = segs;
@@ -118,7 +125,9 @@ defaults = struct(...
     'Coherence', coherence_defaults, ...
     'UseNoiseMask', false, ...
     'NoiseParams', [], ...
-    'NoiseLabelPath', "" ...
+    'NoiseLabelPath', "", ...
+    'NoiseHandlingMode', "hard", ...
+    'NoiseDecision', struct() ...
     );
 fields = fieldnames(defaults);
 for idx = 1:numel(fields)
@@ -178,11 +187,7 @@ end
 params.UseNoiseMask = logical(params.UseNoiseMask);
 
 if ~isfield(params, 'NoiseParams') || isempty(params.NoiseParams)
-    if exist('NoiseParams', 'file') ~= 2
-        script_dir = fileparts(mfilename('fullpath'));
-        root_dir = fileparts(script_dir);
-        addpath(genpath(fullfile(root_dir, 'src', 'noise')));
-    end
+    ensure_noise_path();
     params.NoiseParams = NoiseParams(params.FsTarget);
 end
 if ~isstruct(params.NoiseParams) || ~isscalar(params.NoiseParams)
@@ -195,6 +200,20 @@ end
 if ~(ischar(params.NoiseLabelPath) || (isstring(params.NoiseLabelPath) && isscalar(params.NoiseLabelPath)))
     error('run_detect_heard:InvalidNoiseLabelPath', 'NoiseLabelPath must be a char vector or string scalar.');
 end
+
+if ~isfield(params, 'NoiseHandlingMode') || isempty(params.NoiseHandlingMode)
+    params.NoiseHandlingMode = "hard";
+end
+params.NoiseHandlingMode = string(params.NoiseHandlingMode);
+validNoiseModes = ["hard", "overlap"];
+if ~any(params.NoiseHandlingMode == validNoiseModes)
+    error('run_detect_heard:InvalidNoiseHandlingMode', 'NoiseHandlingMode must be "hard" or "overlap".');
+end
+
+if ~isfield(params, 'NoiseDecision') || isempty(params.NoiseDecision)
+    params.NoiseDecision = struct();
+end
+params.NoiseDecision = fill_noise_decision_defaults(params.NoiseDecision);
 end
 
 function noiseParams = normalise_noise_params(noiseParams, fs, labelPath, useNoiseMask)
@@ -207,6 +226,9 @@ if ~isfield(noiseParams, 'Output') || isempty(noiseParams.Output)
 end
 if ~isfield(noiseParams.Output, 'WriteNoiseLabels') || isempty(noiseParams.Output.WriteNoiseLabels)
     noiseParams.Output.WriteNoiseLabels = false;
+end
+if ~isfield(noiseParams.Output, 'LabelPath') || isempty(noiseParams.Output.LabelPath)
+    noiseParams.Output.LabelPath = "";
 end
 
 if nargin >= 3
@@ -222,11 +244,67 @@ if nargin >= 3
     if hasLabel
         noiseParams.Output.LabelPath = char(labelStr);
     else
-        if isfield(noiseParams.Output, 'LabelPath')
-            noiseParams.Output.LabelPath = "";
+        noiseParams.Output.LabelPath = "";
+    end
+else
+    noiseParams.Output.WriteNoiseLabels = false;
+    noiseParams.Output.LabelPath = "";
+end
+end
+
+function ensure_noise_path()
+if exist('NoiseParams', 'file') ~= 2
+    script_dir = fileparts(mfilename('fullpath'));
+    root_dir = fileparts(script_dir);
+    addpath(genpath(fullfile(root_dir, 'src', 'noise')));
+end
+end
+
+function decision = fill_noise_decision_defaults(decision)
+defaults = struct('MinOverlapFrac', 0.60, ...
+    'MaxStartDiff', 0.12, ...
+    'MaxEndDiff', 0.12);
+fields = fieldnames(defaults);
+for idx = 1:numel(fields)
+    name = fields{idx};
+    if ~isfield(decision, name) || isempty(decision.(name))
+        decision.(name) = defaults.(name);
+    end
+end
+validateattributes(decision.MinOverlapFrac, {'numeric'}, {'scalar', 'real', 'finite', '>=', 0, '<=', 1}, mfilename, 'NoiseDecision.MinOverlapFrac');
+validateattributes(decision.MaxStartDiff, {'numeric'}, {'scalar', 'real', 'finite', '>=', 0}, mfilename, 'NoiseDecision.MaxStartDiff');
+validateattributes(decision.MaxEndDiff, {'numeric'}, {'scalar', 'real', 'finite', '>=', 0}, mfilename, 'NoiseDecision.MaxEndDiff');
+decision.MinOverlapFrac = double(decision.MinOverlapFrac);
+decision.MaxStartDiff = double(decision.MaxStartDiff);
+decision.MaxEndDiff = double(decision.MaxEndDiff);
+end
+
+function segs = filter_with_noise_segments(segs, noiseSegments, decision)
+if isempty(segs) || isempty(noiseSegments)
+    return;
+end
+keep = true(size(segs, 1), 1);
+for idx = 1:size(segs, 1)
+    seg = segs(idx, :);
+    duration = max(seg(2) - seg(1), eps);
+    for j = 1:size(noiseSegments, 1)
+        noiseSeg = noiseSegments(j, :);
+        overlap = max(0, min(seg(2), noiseSeg(2)) - max(seg(1), noiseSeg(1)));
+        if overlap <= 0
+            continue;
+        end
+        overlapFrac = overlap / duration;
+        startDiff = abs(seg(1) - noiseSeg(1));
+        endDiff = abs(seg(2) - noiseSeg(2));
+        if overlapFrac >= decision.MinOverlapFrac && ...
+                startDiff <= decision.MaxStartDiff && ...
+                endDiff <= decision.MaxEndDiff
+            keep(idx) = false;
+            break;
         end
     end
 end
+segs = segs(keep, :);
 end
 
 function coherence = fill_coherence_defaults(coherence)

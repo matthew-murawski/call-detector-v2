@@ -36,6 +36,7 @@ classdef test_pipeline_with_noise_mask < matlab.unittest.TestCase
             tc.assertGreaterThan(size(base_segs, 1), 0, 'baseline detector missed the broadband bursts.');
 
             params.UseNoiseMask = true;
+            params.NoiseHandlingMode = "overlap";
             params.NoiseParams = test_pipeline_with_noise_mask.aggressive_noise_params(fs);
             noise_label_path = [tempname(), '.txt'];
             tc.addTeardown(@() test_pipeline_with_noise_mask.cleanup_file(noise_label_path));
@@ -43,7 +44,7 @@ classdef test_pipeline_with_noise_mask < matlab.unittest.TestCase
 
             masked_segs = run_detect_heard(struct('x', x, 'fs', fs), zeros(0, 2), [], params);
             tc.verifyLessThan(size(masked_segs, 1), size(base_segs, 1), 'noise mask failed to suppress extra detections.');
-            tc.verifyLessThanOrEqual(size(masked_segs, 1), 1, 'too many segments remain after masking.');
+            tc.verifyEqual(size(masked_segs, 1), 0, 'aligned broadband noise should be vetoed.');
             tc.verifyEqual(exist(noise_label_path, 'file'), 2, 'noise label file not written.');
 
             labels = read_audacity_labels(noise_label_path);
@@ -86,6 +87,7 @@ classdef test_pipeline_with_noise_mask < matlab.unittest.TestCase
             tc.assertGreaterThan(min(cov_no_mask), 0.25, 'baseline recall too low for comparison.');
 
             params.UseNoiseMask = true;
+            params.NoiseHandlingMode = "overlap";
             params.NoiseParams = NoiseParams(fs);
             params.NoiseParams.TonalityGuard.Enable = true;
             params.NoiseLabelPath = "";
@@ -93,6 +95,7 @@ classdef test_pipeline_with_noise_mask < matlab.unittest.TestCase
             segs_mask = run_detect_heard(struct('x', x, 'fs', fs), zeros(0, 2), [], params);
             cov_mask = test_pipeline_with_noise_mask.coverage(segs_mask, truth);
 
+            tc.verifyGreaterThanOrEqual(size(segs_mask, 1), size(truth, 1), 'noise mask removed too many segments.');
             tc.verifyGreaterThanOrEqual(min(cov_mask), min(cov_no_mask) - 0.10, 'noise mask degraded recall excessively.');
             tc.verifyGreaterThan(max(cov_mask), 0.30, 'noise mask failed to keep core recall.');
         end
