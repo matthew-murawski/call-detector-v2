@@ -14,10 +14,7 @@ if ischar(input) || (isstring(input) && isscalar(input))
     if isempty(raw)
         error('read_audio:EmptyAudio', 'Audio file contains no samples.');
     end
-    if size(raw, 2) > 1
-        raw = mean(raw, 2);
-    end
-    x = double(raw(:));
+    x = select_second_channel(raw);
     fs = double(fs);
     validateattributes(fs, {'numeric'}, {'scalar', 'positive'}, mfilename, 'fs');
     return;
@@ -31,7 +28,26 @@ if ~isfield(input, 'x') || ~isfield(input, 'fs')
     error('read_audio:MissingFields', 'Struct input must contain fields x and fs.');
 end
 validateattributes(input.fs, {'numeric'}, {'scalar', 'positive'}, mfilename, 'fs');
-validateattributes(input.x, {'numeric'}, {'vector', 'nonempty'}, mfilename, 'x');
+validateattributes(input.x, {'numeric'}, {'nonempty', '2d'}, mfilename, 'x');
 fs = double(input.fs);
-x = double(input.x(:));
+x = select_second_channel(input.x);
+end
+
+function x = select_second_channel(data)
+data = double(data);
+if isvector(data)
+    x = data(:);
+    return;
+end
+if size(data, 2) >= 2
+    % take channel two when stereo data arrives
+    x = data(:, 2);
+    x = x(:);
+    return;
+end
+if size(data, 1) >= 2
+    x = data(2, :).';
+    return;
+end
+x = data(:);
 end

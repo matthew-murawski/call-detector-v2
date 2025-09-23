@@ -12,7 +12,7 @@ classdef test_hysteresis < matlab.unittest.TestCase
         function detects_three_segments_from_synth(tc)
             data = test_hysteresis.synth_fixture();
             params = test_hysteresis.default_params();
-            [frame_in, stats] = adaptive_hysteresis(data.feats.energy, data.feats.entropy, data.feats.flux, data.feats.tonal_ratio, data.self_mask, params);
+            [frame_in, stats] = adaptive_hysteresis(data.feats.energy, data.feats.entropy, data.feats.flux, data.feats.tonal_ratio, data.feats.flatness, data.self_mask, params);
             intervals = frames_to_segments(frame_in, data.hop_seconds);
             intervals = postprocess_segments(intervals, params);
             intervals = filter_by_entropy_coverage(intervals, data.feats.entropy, data.hop_seconds, stats.entropy_thr, params.MinEntropyCoverage);
@@ -31,7 +31,7 @@ classdef test_hysteresis < matlab.unittest.TestCase
             mask_frames = data.frame_centers >= second_seg(1) & data.frame_centers <= second_seg(2);
             self_mask(mask_frames) = true;
 
-            [frame_in, stats] = adaptive_hysteresis(data.feats.energy, data.feats.entropy, data.feats.flux, data.feats.tonal_ratio, self_mask, params);
+            [frame_in, stats] = adaptive_hysteresis(data.feats.energy, data.feats.entropy, data.feats.flux, data.feats.tonal_ratio, data.feats.flatness, self_mask, params);
             tc.verifyFalse(any(frame_in(self_mask)));
 
             intervals = frames_to_segments(frame_in, data.hop_seconds);
@@ -50,7 +50,8 @@ classdef test_hysteresis < matlab.unittest.TestCase
             flux = zeros(size(energy));
             params = test_hysteresis.default_params();
             tonal_ratio = zeros(size(energy));
-            frame_in = adaptive_hysteresis(energy, entropy, flux, tonal_ratio, false(size(energy)), params);
+            flatness = ones(size(energy)) * 0.95;
+            frame_in = adaptive_hysteresis(energy, entropy, flux, tonal_ratio, flatness, false(size(energy)), params);
 
             tc.verifyFalse(any(frame_in));
         end
@@ -61,11 +62,11 @@ classdef test_hysteresis < matlab.unittest.TestCase
             params.FluxQuantileEnter = 0.95;
 
             params.BackgroundTrim = 1.0;
-            frame_in_no_trim = adaptive_hysteresis(data.energy, data.entropy, data.flux, data.tonal_ratio, data.self_mask, params);
+            frame_in_no_trim = adaptive_hysteresis(data.energy, data.entropy, data.flux, data.tonal_ratio, data.flatness, data.self_mask, params);
             tc.verifyFalse(any(frame_in_no_trim(data.call_frames)));
 
             params.BackgroundTrim = 0.95;
-            frame_in_trim = adaptive_hysteresis(data.energy, data.entropy, data.flux, data.tonal_ratio, data.self_mask, params);
+            frame_in_trim = adaptive_hysteresis(data.energy, data.entropy, data.flux, data.tonal_ratio, data.flatness, data.self_mask, params);
             tc.verifyTrue(all(frame_in_trim(data.call_frames)));
             tc.verifyFalse(any(frame_in_trim(data.noise_frames)));
         end
@@ -74,7 +75,7 @@ classdef test_hysteresis < matlab.unittest.TestCase
             data = test_hysteresis.tonal_noise_fixture();
             params = test_hysteresis.default_params();
 
-            frame_in = adaptive_hysteresis(data.energy, data.entropy, data.flux, data.tonal_ratio, data.self_mask, params);
+            frame_in = adaptive_hysteresis(data.energy, data.entropy, data.flux, data.tonal_ratio, data.flatness, data.self_mask, params);
             tc.verifyTrue(all(frame_in(data.call_frames)));
             tc.verifyFalse(any(frame_in(data.noise_frames)));
         end
@@ -83,7 +84,7 @@ classdef test_hysteresis < matlab.unittest.TestCase
             twitter = test_hysteresis.broadband_twitter_fixture();
             params = test_hysteresis.default_params();
 
-            [frame_in_twitter, stats] = adaptive_hysteresis(twitter.energy, twitter.entropy, twitter.flux, twitter.tonal_ratio, twitter.self_mask, params);
+            [frame_in_twitter, stats] = adaptive_hysteresis(twitter.energy, twitter.entropy, twitter.flux, twitter.tonal_ratio, twitter.flatness, twitter.self_mask, params);
             segments = frames_to_segments(frame_in_twitter, twitter.hop_seconds);
             segments = filter_by_entropy_coverage(segments, twitter.entropy, twitter.hop_seconds, stats.entropy_thr, params.MinEntropyCoverage, twitter.tonal_ratio, stats.broadband_entropy_thr, stats.broadband_tonal_thr);
 
@@ -91,7 +92,7 @@ classdef test_hysteresis < matlab.unittest.TestCase
             tc.verifyGreaterThanOrEqual(size(segments, 1), 1);
 
             noise = test_hysteresis.burst_then_tone_fixture();
-            frame_in_noise = adaptive_hysteresis(noise.energy, noise.entropy, noise.flux, noise.tonal_ratio, noise.self_mask, params);
+            frame_in_noise = adaptive_hysteresis(noise.energy, noise.entropy, noise.flux, noise.tonal_ratio, noise.flatness, noise.self_mask, params);
             tc.verifyFalse(any(frame_in_noise(noise.noise_frames)));
         end
     end
@@ -107,6 +108,8 @@ classdef test_hysteresis < matlab.unittest.TestCase
             params.TonalityQuantileStay = 0.55;
             params.BroadbandEntropySlack = 0.35;
             params.BroadbandTonalityQuantile = 0.10;
+            params.FlatnessQuantile = 0.90;
+            params.FlatnessSlack = 0.10;
             params.MinDur = 0.05;
             params.MaxDur = 0.80;
             params.MergeGap = 0.040;
@@ -171,10 +174,15 @@ classdef test_hysteresis < matlab.unittest.TestCase
             tonal_ratio(quiet_frames + (1:noise_frames)) = 0.5;
             tonal_ratio(quiet_frames + noise_frames + (1:call_frames)) = 8;
 
+            flatness = ones(total_frames, 1) * 0.9;
+            flatness(quiet_frames + (1:noise_frames)) = 0.95;
+            flatness(quiet_frames + noise_frames + (1:call_frames)) = 0.25;
+
             data.energy = energy;
             data.entropy = entropy;
             data.flux = flux;
             data.tonal_ratio = tonal_ratio;
+            data.flatness = flatness;
             data.self_mask = false(total_frames, 1);
             data.call_frames = (quiet_frames + noise_frames + 1):total_frames;
             data.noise_frames = (quiet_frames + 1):(quiet_frames + noise_frames);
@@ -197,10 +205,14 @@ classdef test_hysteresis < matlab.unittest.TestCase
             tonal_ratio = ones(total_frames, 1) * 0.4;
             tonal_ratio(noise_frames + (1:call_frames)) = 8;
 
+            flatness = ones(total_frames, 1) * 0.95;
+            flatness(noise_frames + (1:call_frames)) = 0.25;
+
             data.energy = energy;
             data.entropy = entropy;
             data.flux = flux;
             data.tonal_ratio = tonal_ratio;
+            data.flatness = flatness;
             data.self_mask = false(total_frames, 1);
             data.call_frames = (noise_frames + 1):total_frames;
             data.noise_frames = (1:noise_frames).';
@@ -224,10 +236,14 @@ classdef test_hysteresis < matlab.unittest.TestCase
             tonal_ratio = ones(total_frames, 1) * 0.25;
             tonal_ratio(quiet_frames + (1:twitter_frames)) = 0.05;
 
+            flatness = ones(total_frames, 1) * 0.92;
+            flatness(quiet_frames + (1:twitter_frames)) = 0.8;
+
             data.energy = energy;
             data.entropy = entropy;
             data.flux = flux;
             data.tonal_ratio = tonal_ratio;
+            data.flatness = flatness;
             data.self_mask = false(total_frames, 1);
             data.call_frames = (quiet_frames + 1):(quiet_frames + twitter_frames);
             data.call_frames_mask = false(total_frames, 1);

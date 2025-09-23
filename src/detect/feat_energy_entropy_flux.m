@@ -59,8 +59,18 @@ if any(energy_mask)
     tonal_vals = peak_db - mean_db;
 end
 
+%% compute spectral flatness
+flatness_vals = zeros(size(S, 2), 1);
+if any(energy_mask)
+    Sb = S(energy_mask, :);
+    geo_mean = exp(mean(log(Sb + eps), 1));
+    arith_mean = mean(Sb, 1) + eps;
+    flatness_vals = (geo_mean ./ arith_mean).';
+end
+
 feats.energy = energy_vals;
 feats.entropy = entropy_vals;
 feats.flux = flux_vals;
 feats.tonal_ratio = tonal_vals;
+feats.flatness = flatness_vals;
 end

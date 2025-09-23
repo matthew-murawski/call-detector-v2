@@ -37,5 +37,21 @@ classdef test_preprocess < matlab.unittest.TestCase
             tc.verifyEqual(y_same, x);
             tc.verifyEqual(fs_same, fs_in);
         end
+
+        function spectral_focus_prioritises_band(tc)
+            freqs = linspace(0, 24000, 256).';
+            S = ones(numel(freqs), 5);
+            focus_band = [7000 9000];
+            S_focus = apply_spectral_focus(S, freqs, focus_band);
+            in_band = freqs >= focus_band(1) & freqs <= focus_band(2);
+            below_band = freqs <= focus_band(1) - 2000;
+            in_vals = S_focus(in_band, :);
+            out_vals = S_focus(below_band, :);
+            tc.assertNotEmpty(in_vals);
+            tc.assertNotEmpty(out_vals);
+            in_power = mean(in_vals(:));
+            out_power = mean(out_vals(:));
+            tc.verifyGreaterThan(in_power, out_power * 5);
+        end
     end
 end
