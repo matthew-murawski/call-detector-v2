@@ -116,7 +116,7 @@ if isempty(has_paths)
     script_dir = fileparts(mfilename('fullpath'));
     root_dir = fileparts(script_dir);
     addpath(fullfile(root_dir, 'scripts'));
-    addpath(fullfile(root_dir, 'src', 'noise'));
+    addpath(genpath(fullfile(root_dir, 'src', 'noise')));
     has_paths = true;
 end
 end

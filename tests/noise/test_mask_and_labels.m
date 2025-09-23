@@ -4,7 +4,7 @@ classdef test_mask_and_labels < matlab.unittest.TestCase
     methods (TestClassSetup)
         function add_source_to_path(tc) %#ok<INUSD>
             root_dir = fileparts(fileparts(fileparts(mfilename('fullpath'))));
-            addpath(fullfile(root_dir, 'src', 'noise'));
+            addpath(genpath(fullfile(root_dir, 'src', 'noise')));
         end
     end
     % the test block checks mask coverage, empty behaviour, and label output.

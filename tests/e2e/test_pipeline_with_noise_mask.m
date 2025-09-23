@@ -9,7 +9,7 @@ classdef test_pipeline_with_noise_mask < matlab.unittest.TestCase
             addpath(fullfile(root_dir, 'src', 'features'));
             addpath(fullfile(root_dir, 'src', 'io'));
             addpath(fullfile(root_dir, 'src', 'mask'));
-            addpath(fullfile(root_dir, 'src', 'noise'));
+            addpath(genpath(fullfile(root_dir, 'src', 'noise')));
         end
     end
 

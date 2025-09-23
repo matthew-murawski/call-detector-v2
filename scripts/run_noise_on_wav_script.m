@@ -23,6 +23,10 @@ if nargin < 4
     chunkOpts = struct();
 end
 
+script_dir = fileparts(mfilename('fullpath'));
+root_dir = fileparts(script_dir);
+addpath(genpath(fullfile(root_dir, 'src', 'noise')));
+
 validateattributes(wavPath, {'char', 'string'}, {'scalartext'}, mfilename, 'wavPath');
 validateattributes(outLabelPath, {'char', 'string'}, {'scalartext'}, mfilename, 'outLabelPath');
 

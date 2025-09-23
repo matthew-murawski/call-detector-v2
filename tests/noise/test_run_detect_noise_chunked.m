@@ -4,7 +4,7 @@ classdef test_run_detect_noise_chunked < matlab.unittest.TestCase
     methods (TestClassSetup)
         function add_source_to_path(tc) %#ok<INUSD>
             root_dir = fileparts(fileparts(fileparts(mfilename('fullpath'))));
-            addpath(fullfile(root_dir, 'src', 'noise'));
+            addpath(genpath(fullfile(root_dir, 'src', 'noise')));
         end
     end
     % the test block checks boundary robustness and path handling.

@@ -65,7 +65,7 @@ if isempty(has_added)
     addpath(fullfile(root_dir, 'src', 'mask'));
     addpath(fullfile(root_dir, 'src', 'label'));
     addpath(fullfile(root_dir, 'src', 'features'));
-    addpath(fullfile(root_dir, 'src', 'noise'));
+    addpath(genpath(fullfile(root_dir, 'src', 'noise')));
     addpath(fullfile(root_dir, 'src', 'learn'));
     has_added = true;
 end
@@ -181,7 +181,7 @@ if ~isfield(params, 'NoiseParams') || isempty(params.NoiseParams)
     if exist('NoiseParams', 'file') ~= 2
         script_dir = fileparts(mfilename('fullpath'));
         root_dir = fileparts(script_dir);
-        addpath(fullfile(root_dir, 'src', 'noise'));
+        addpath(genpath(fullfile(root_dir, 'src', 'noise')));
     end
     params.NoiseParams = NoiseParams(params.FsTarget);
 end
