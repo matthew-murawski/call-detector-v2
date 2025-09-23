@@ -1,4 +1,10 @@
-function segments = run_noise_on_wav_script(wavPath, outLabelPath, noiseParams, chunkOpts)
+
+wavPath = '/Users/matt/Documents/Zhao Lab/audio/little_clip_M93A_c_S178.wav';
+outLabelPath = '/Users/matt/Documents/GitHub/call-detector-v2/output/demo/noise.txt';
+
+segments = run_noise_on_wav(wavPath, outLabelPath);
+
+function segments = run_noise_on_wav(wavPath, outLabelPath, noiseParams, chunkOpts)
 % run_noise_on_wav_script runs the stage 0 noise detector on a wav file and writes NOISE labels.
 %
 % Usage:
