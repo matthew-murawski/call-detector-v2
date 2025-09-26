@@ -58,7 +58,7 @@ heard_labels = segs;
 % write outputs for downstream tools.
 if should_write(outLabelPath)
     labels = repmat("HEARD", size(segs, 1), 1);
-    write_audacity_labels(char(outLabelPath), segs, labels);
+    write_audacity_labels(char(outLabelPath), segs);
 end
 end
 

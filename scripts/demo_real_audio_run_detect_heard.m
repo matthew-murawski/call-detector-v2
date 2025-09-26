@@ -16,12 +16,12 @@ end
 
 % wav_path = '/Users/matt/Documents/Zhao Lab/audio/M93A_S105_little_clip.wav';
 
-wav_path = '/Users/matt/Documents/Zhao Lab/audio/little_clip_M93A_c_S178_enhanced.wav';
+wav_path = '/Users/matt/Documents/Zhao Lab/audio/test clips/S178_test.wav';
 
-produced = [
-    0.0 0.18;
-    0.18 0.5;
-];
+T = read_audacity_labels('/Users/matt/Documents/Zhao Lab/audio/test clips/S178_test_produced.txt');
+produced = zeros(size(T, 1), 2);
+produced(:, 1) = T.onset;
+produced(:, 2) = T.offset;
 
 addpath(genpath(fullfile(repo_root, 'src', 'noise')));
   params.UseNoiseMask = true;
@@ -63,7 +63,7 @@ params.NoiseParams.TonalityGuard.Enable = false;
 params.NoiseDecision = struct('MinOverlapFrac', 0.60, ...
     'MaxStartDiff', 0.12, ...
     'MaxEndDiff', 0.12);
-label_path = fullfile(output_dir, 'demo_detected_labels.txt');
+label_path = fullfile('/Users/matt/Documents/Zhao Lab/audio/test clips/S178_test_heard_auto.txt');
 heard = run_detect_heard(wav_path, produced, label_path, params);
 produced_path = fullfile(output_dir, 'demo_produced_labels.txt');
 write_audacity_labels(produced_path, produced, repmat("SELF", size(produced, 1), 1));
