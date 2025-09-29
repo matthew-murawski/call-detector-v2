@@ -24,7 +24,7 @@ function heard = run_detect_heard_for_session(session)
     wav_dir = '/Volumes/Zhao/JHU_Data/Recording_Colony_Neural/M93A';
     wav_path = fullfile(wav_dir, sprintf('voc_M93A_c_%s.wav', sess));
     labels_dir = '/Users/matt/Documents/GitHub/vocalization/data/labels';
-    produced_labels_path = fullfile(labels_dir, sprintf('M93A_%s_produced.txt', sess));
+    produced_labels_path = fullfile('/Users/matt/Documents/GitHub/vocalization/data/Label Files/', sprintf('M93A_%s_produced.txt', sess));
 
     % ensure output folder exists under repo_root
     output_dir = fullfile(repo_root, 'output');

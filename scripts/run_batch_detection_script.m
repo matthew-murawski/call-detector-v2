@@ -13,11 +13,11 @@
 %                            CONFIGURATION
 % -----------------------------------------------------------------------------
 % List of session numbers to process. Add your session numbers here.
-sessions_to_process = [177, 178, 179];
+sessions_to_process = [177, 179, 180, 181];
 
 % Path to the directory where produced labels should be stored.
 % This should match the convention expected by `run_detect_heard_for_session`.
-labels_dir = '/Users/matt/Documents/GitHub/vocalization/data/labels';
+labels_dir = '/Users/matt/Documents/GitHub/vocalization/data/Label Files';
 
 
 % -----------------------------------------------------------------------------
